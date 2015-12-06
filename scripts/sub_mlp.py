@@ -1,5 +1,5 @@
 north_pole = (90,0)
-weight_limit = 100#TMP 1000
+weight_limit = 1000#TMP 1000
 sleigh_weight = 10
 
 
@@ -69,7 +69,7 @@ class MLT:
         sorted_weights = sorted([(wgt,id+1) for id,wgt in enumerate(self.weights[1:])],reverse=True)
         return [id for wgt,id in sorted_weights]
 
-    def construction(self,alpha=0.2,beta=0.1):
+    def construction(self,alpha=0.3,beta=0.4):
         """
         construct an initial tour, with greediness parameter alpha, and
         param beta to favor large weights first
@@ -88,6 +88,68 @@ class MLT:
             if len(candidates)==1:
                 break
         return Tour(self,tour+candidates)
+
+    def RVND(self,tour,disp=0):
+        NLinit = ['swap','R1','R2','R3']
+        NL = NLinit[:]
+        tour.preprocess_subsequences()
+        it = 0
+        if disp:
+            print it,tour.wlatency
+        while NL:
+            it+=1
+            neighboorhood = NL[np.random.randint(len(NL))]
+            best = None
+            fbest = tour.wlatency
+            for t in tour.iter_neighbours(neighboorhood):
+                if t.wlatency < fbest:
+                    best = t
+                    fbest = t.wlatency
+
+            if best is None:
+                NL.remove(neighboorhood)
+            else:
+                tour = best
+                NL = NLinit[:]
+                tour.preprocess_subsequences()
+            if disp:
+                print it,tour.wlatency
+        return tour
+
+    def optimize(self,restart=4,init_construction=100,alpha=0.3,beta=0.4,disp=0):
+        #TODO number_perturbation
+        fbest = np.inf
+        best = None
+        for i in range(restart):
+            this_init_fbest = np.inf
+            this_init_best = None
+            for j in range(init_construction):
+                tour = self.construction(alpha,beta)
+                if tour.wlatency < this_init_fbest:
+                    this_init_fbest = tour.wlatency
+                    this_init_best = tour
+
+            tour = this_init_best
+            tour = self.RVND(tour,disp)
+            if tour.wlatency < fbest:
+                fbest = tour.wlatency
+                best = tour
+            if disp:
+                print 'Best tour after {0} restart(s): {1}'.format(i+1,fbest)
+                print '-----------------------------------'
+        return best
+
+    def quick_opt(self,ncons=500,alpha=0.3,beta=0.4):
+        fbest = np.inf
+        best = None
+        for i in range(ncons):
+            tour = self.construction(alpha,beta)
+            if tour.wlatency < fbest:
+                    fbest = tour.wlatency
+                    best = tour
+        return best
+
+
 
 
 class Tour:
@@ -148,7 +210,7 @@ class Tour:
         """
         assert(i < j)
         assert(i >= 0)
-        assert(j < t.mlt.n-1)
+        assert(j < self.mlt.n-1)
         assert(self.subseq is not None)
         """useless !?
         oi = self.order[i]
@@ -165,8 +227,8 @@ class Tour:
             seq = seq + self.subseq[i+1,j]
         seq = seq + self.subseq[i,i+1]
         if j < self.mlt.n-2:
-            seq = seq + self.subseq[j+1,t.mlt.n-1]
-        return seq
+            seq = seq + self.subseq[j+1,self.mlt.n-1]
+        return seq.to_tour()
 
     def reinsert(self,i,j,k=1):
         """
@@ -174,21 +236,42 @@ class Tour:
         """
         assert(self.subseq is not None)
         assert(i >= 0)
-        assert(i+k-1 < t.mlt.n-1)
+        assert(i+k-1 < self.mlt.n-1)
         assert(j >= 0)
-        assert(j+k-1 < t.mlt.n-1)
+        assert(j+k-1 < self.mlt.n-1)
         assert(i!=j)
         if i < j :
+            #0  1  2 | i+k ... j+k-1 | i  i+1 i+k-1  | j+k  .. n-2
             seq = self.subseq[i,i+k]
-            if j-1 > i:
-                seq = self.subseq[i+k,j-1+k] + seq
+            seq = self.subseq[i+k,j+k] + seq
             if i > 0:
                 seq = self.subseq[0,i] + seq
             if j+k < self.mlt.n-1:
-                seq = seq + self.subseq[j+k-1,t.mlt.n-1]
+                seq = seq + self.subseq[j+k,self.mlt.n-1]
         else:
-            pass#TODO !!!
-        return seq
+            #0  1  j-1 | i  i+1 i+k-1 | j ... i-1 | i+k ... n-2
+            seq = self.subseq[i,i+k]
+            if j>0:
+                seq = self.subseq[0,j] + seq
+            seq = seq + self.subseq[j,i]
+            if i+k < self.mlt.n-1:
+                seq = seq + self.subseq[i+k,self.mlt.n-1]
+
+        return seq.to_tour()
+
+    def iter_neighbours(self,neighboorhood):
+        if neighboorhood == 'swap':
+            for i in range(self.mlt.n-2):
+                for j in range(i+1,self.mlt.n-1):
+                    yield self.swap(i,j)
+        elif neighboorhood[0] == 'R' and neighboorhood[1].isdigit() and len(neighboorhood)==2:
+            k = int(neighboorhood[1])
+            for i in range(self.mlt.n-k):
+                for j in range(self.mlt.n-k):
+                    if i==j:
+                        continue
+                    else:
+                        yield self.reinsert(i,j,k)
 
 class Subsequence:
     """
@@ -244,7 +327,7 @@ class Subsequence:
 
 
 
-
+"""
 #----------------------#
 #construct an instance #
 #----------------------#
@@ -261,6 +344,7 @@ for d,gft_id_minus_1 in close_gifts:
         sub_gift_ids.append(gft_id_minus_1+1)
     else:
         break
+
 
 #--------------------------#
 #eval some (stupid) orders #
@@ -294,7 +378,7 @@ seq2 = Subsequence(mlt,seq2)
 t = constructed_tour
 t.preprocess_subsequences()
 sw = t.swap(2,5)
-sw.to_tour().wlatency
+sw.wlatency
 Tour(mlt,sw.order)
 
 #----------------#
@@ -303,4 +387,15 @@ Tour(mlt,sw.order)
 t = constructed_tour
 t.preprocess_subsequences()
 t.order
-t.reinsert(2,6)#there is a bug ... TODO correct
+ri = t.reinsert(2,6)
+Tour(mlt,ri.order)
+
+#----------------#
+# test optimize  #
+#----------------#
+
+opt = mlt.optimize(4,disp=1)
+qopt = mlt.quick_opt()
+
+
+"""
