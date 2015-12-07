@@ -12,17 +12,21 @@ class MLT:
     A class for a sub minimum latency tour problem
     #TODOPT smarter load  of ids with pandas
     """
-    def __init__(self,gifts,ids):
+    def __init__(self,gifts,ids,weights=None,positions=None):
 
-        self.positions = [north_pole]
-        self.weights = [sleigh_weight]
+        if weights is not None and positions is not None:
+            self.positions = [north_pole] + positions
+            self.weights = [sleigh_weight] + weights
+        else:
+            self.positions = [north_pole]
+            self.weights = [sleigh_weight]
 
-        for i in ids:
-            gift = gifts.loc[i-1]
-            pos = tuple(gift[['Latitude','Longitude']])
-            wgt = gift.Weight
-            self.weights.append(wgt)
-            self.positions.append(pos)
+            for i in ids:
+                gift = gifts.loc[i-1]
+                pos = tuple(gift[['Latitude','Longitude']])
+                wgt = gift.Weight
+                self.weights.append(wgt)
+                self.positions.append(pos)
 
         """
         the number of gifts + the north pole
