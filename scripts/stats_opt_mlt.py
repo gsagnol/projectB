@@ -8,13 +8,14 @@ import numpy as np
 from haversine import haversine
 import sub_mlp as subMLT
 
+gifts = pd.read_csv('../input/gifts.csv')
+ngifts = gifts.count()[0]
+
 res = []
 for iter in range(500):
     #----------------------#
     #construct an instance #
     #----------------------#
-    gifts = pd.read_csv('../input/gifts.csv')
-    ngifts = gifts.count()[0]
     centerid = np.random.randint(ngifts)
     center = gifts.loc[centerid][['Latitude','Longitude']].values
     dist_to_center = lambda x: haversine(tuple(x),center)
