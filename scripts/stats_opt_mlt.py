@@ -8,6 +8,7 @@ import numpy as np
 from haversine import haversine
 import sub_mlp as subMLT
 import scipy.stats as sst
+import scipy.optimize
 
 gifts = pd.read_csv('../input/gifts.csv')
 ngifts = gifts.count()[0]
@@ -77,9 +78,15 @@ for iter in range(500):
         #----------------------------#
 
         center = (45,0.)
+        #lognormal or uniform over [0.001,1]
+        if np.random.rand() < 0.5:
+            ratio_width_height = 10**(-3+np.random.rand()*3)
+        else:
+            ratio_width_height = max(np.random.rand(),0.001)
+        area = 75000+np.random.randint(3)*25000.
         width = 10. + np.random.rand()*140.
-        area = 50000. + 50000.*np.random.rand()
-        height = area/width
+        height = (area/ratio_width_height)**0.5
+        width = area/height
 
         lamax = 45.
         dx = lambda x: haversine((45,0.),(x,0.))-height
@@ -122,7 +129,8 @@ for iter in range(500):
     #-----------------------------#
     # Approximate sol of instance #
     #-----------------------------#
-    qopt = mlt.quick_opt()
+    #qopt = mlt.quick_opt()
+    qopt = mlt.optimize(disp=1)
 
     print iter
     thisres = {'centroid':centroid,
@@ -136,13 +144,16 @@ for iter in range(500):
                'qopt':qopt.wlatency,
                'positions': positions,
                'width':width,
-               'height':height
+               'height':height,
+               'area': area,
+               'ratio': ratio_width_height,
+               'iter':iter
                }
     print qopt.wlatency,centroid,sum(dists_to_centroid),width,height
 
     res.append(thisres)
 
-f = open('analysis_statopt_rectangles','w')
+f = open('analysis_statopt_trueopt_3areas','w')
 f.write(str(res))
 f.close()
 
@@ -190,3 +201,151 @@ y = d(wcentroid,pole)*(W + 10) + 75.563 * sum_i d(gift_i,wcentroid)
 
 """
 scatter(vqopt,[(r['total_weight']+sleigh_weight)*r['wpole']+ 75.563*sum(r['wdists']) for r in res])
+
+
+
+#------------------------------------#
+# Result Analysis -- thin rectangles #
+#------------------------------------#
+
+f = open('analysis_statopt_rectangles','r')
+res = eval(f.read())
+f.close()
+
+const_1 = [ (r['total_weight']+sleigh_weight)*r['pole'] for r in res ]
+const_2 = [ (r['total_weight']+sleigh_weight)*(r['pole']+0.5*r['height']) for r in res ]
+const_3 = [ sum([haversine(pos,north_pole)*w for pos,w in zip(r['positions'],r['item_weights'])]) + max([haversine(pos,north_pole) for pos in r['positions']])*2*sleigh_weight for r in res]
+const_4 = [ sum([haversine(pos,north_pole)*w for pos,w in zip(r['positions'],r['item_weights'])]) + r['pole']*2*sleigh_weight for r in res]
+
+y1 = [r['qopt']-c1 for (r,c1) in zip(res,const_1)]
+y2 = [r['qopt']-c2 for (r,c2) in zip(res,const_2)]
+y3 = [r['qopt']-c3 for (r,c3) in zip(res,const_3)]
+y4 = [r['qopt']-c4 for (r,c4) in zip(res,const_4)]
+
+areas = np.array([r['width']*r['height'] for r in res])
+ratios = np.array([r['width']/r['height'] for r in res])
+
+
+#Interesting: thing, when the constant is c_1, it is better to have large ratios, but when the constant is c_3, low ratios are better !
+figure(1);clf()
+scat = scatter(areas**0.5,y1,c=ratios)
+colorbar(scat, shrink=0.5, aspect=5)
+
+figure(2)
+scat = scatter(areas**0.5,y2,c=ratios)
+colorbar(scat, shrink=0.5, aspect=5)
+
+figure(3)
+scat = scatter(areas**0.5,y3,c=ratios)
+colorbar(scat, shrink=0.5, aspect=5)
+
+xx = [a**0.5 for a,r in zip(areas,ratios) if r>0.2]
+yy = [y for y,r in zip(y1,ratios) if r>0.2]
+scatter(xx,yy)
+#in figure1, good fit of best sols with y1 = 2780 * area**0.5
+y0 = np.array([y-2780*a**0.5 for y,z in zip(y1,areas)])
+figure(4)
+scatter(ratios,y0)
+fff = lambda (a,b): a*areas**0.5 + b/ratios-y1
+scipy.optimize.leastsq(fff,(0,1e4))
+
+fff = lambda (a,b): a*areas**0.5 + b/ratios-y3
+
+#A good fit:
+#y1= 2400 area**0.5 + 9140/ratio
+figure(5)
+scatter(2400 * areas**0.5 + 9140/ratios,y1)
+scat = scatter(3179.56 * areas**0.5 + 5570.38/ratios,y1,c=ratios)
+
+figure(5);clf()
+scat = scatter(1498 * areas**0.5 -5.57/ratios+1.21e5,y3,c=ratios)
+
+#------------------------------------#
+# Result Analysis -- True opt        #
+#------------------------------------#
+
+
+
+f = open('analysis_statopt_trueopt_3areas','r')
+res = eval(f.read())
+f.close()
+
+ll=90000
+uu=110000
+figure(1);clf()
+scat = scatter([r['ratio'] for r in res if ll<r['area']<uu],[y1[i] for i,r in enumerate(res) if ll<r['area']<uu])
+
+figure(2);clf()
+scat = scatter([r['ratio'] for r in res if ll<r['area']<uu],[y3[i] for i,r in enumerate(res) if ll<r['area']<uu])
+
+figure(3);clf()
+scat = scatter([r['ratio'] for r in res if ll<r['area']<uu],[y4[i] for i,r in enumerate(res) if ll<r['area']<uu])
+
+
+#-------------------------------------#
+#-- On a region 10.000 x 600 km     --#
+#-------------------------------------#
+
+res = {}
+for n in [1,2,3,4,5,6]:#[1,2,3,4,5,6,10,12,15,20,30]:
+    J = 60//n
+    K = n
+    res[n] = {}
+    for j in range(J):
+        for k in range(K):
+            
+            width  = 10.*n
+            height = 10000./n
+                
+            top = 45.
+            dx = lambda x: haversine((top,0.),(x,0.))-k*height
+            lamax = scipy.optimize.fsolve(dx,0)
+            dx = lambda x: haversine((top,0.),(x,0.))-(k+1)*height
+            lamin = scipy.optimize.fsolve(dx,0)
+            dy = lambda y: haversine((top,0.),(top,y))-0.5 * width
+            lomin = scipy.optimize.fsolve(dy,-20)
+            if lomin>0: lomin = -lomin
+            lomax = -lomin
+            
+            wgt = 0.
+
+            positions = []
+            weights = []
+
+            while True:
+                wg = random_weight()
+                wgt += wg
+
+                if wgt < weight_limit:
+                    pos = (lamin + np.random.rand()*(lamax-lamin),lomin + np.random.rand()*(lomax-lomin))
+                    pos = (pos[0][0],pos[1][0])
+                    positions.append(pos)
+                    weights.append(wg)
+                else:
+                    break
+
+            mlt = subMLT.MLT(None,None,weights,positions)
+            res[n][j,k] = mlt.quick_opt().wlatency
+            print n,j,k,res[n][j,k]
+    print '----'
+    print n,sum(res[n].values())
+    print '----'
+    
+'''
+[sum(r.values()) for r in res.values()]
+Out[352]: 
+[653187173.57388115,#1
+ 630521009.69172549,#2
+ 624715351.42617869,#3
+ 626588497.82606816,#4
+ 630029389.14382505,#5
+ 628286118.27342618,#6
+ 638452668.26271176,#10
+ 641045572.91896641,#12
+ 642001694.99819899,#15
+ 644616752.26715946,#20
+ 648172565.35994923]#30
+]
+
+
+'''
