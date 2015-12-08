@@ -3,6 +3,7 @@
 # kmeanssample 2 pass, first sample sqrt(N)
 
 from __future__ import division
+from haversine import haversine
 import random
 import numpy as np
 from scipy.spatial.distance import cdist  # $scipy/spatial/distance.py
@@ -49,8 +50,16 @@ def kmeans( X, centres, delta=.001, maxiter=10, metric="euclidean", p=2, verbose
     allx = np.arange(N)
     prevdist = 0
     for jiter in range( 1, maxiter+1 ):
-        D = cdist_sparse( X, centres, metric=metric, p=p )  # |X| x |centres|
-        xtoc = D.argmin(axis=1)  # X -> nearest centre
+        if metric.startswith('mydist'):
+            a = float(metric.split(':')[1])
+            mydis = lambda x,y: 0.5*( a*haversine(x,(x[0],y[1])) + haversine(y,(x[0],y[1]))) + 0.5*(haversine(x,(y[0],x[1])) + a*haversine(y,(y[0],x[1])))
+            D = cdist(X,centres)
+            close = np.argsort(D,axis=1)[:,:10]
+            xtoc = np.array([close[i][np.argmin(cdist(np.atleast_2d(X[i]),centres[close[i]],mydis))]
+                             for i in range(N)])
+        else:
+            D = cdist_sparse( X, centres, metric=metric, p=p )  # |X| x |centres|
+            xtoc = D.argmin(axis=1)  # X -> nearest centre
         distances = D[allx,xtoc]
         avdist = distances.mean()  # median ?
         if verbose >= 2:
