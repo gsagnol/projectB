@@ -94,7 +94,7 @@ class MLT:
         return Tour(self,tour+candidates)
 
     def RVND(self,tour,disp=0):
-        NLinit = ['swap','R1','R2','R3']
+        NLinit = ['swap','R1','R2','R3','2opt']
         NL = NLinit[:]
         tour.preprocess_subsequences()
         it = 0
@@ -121,7 +121,7 @@ class MLT:
         return tour
 
     def optimize(self,restart=4,init_construction=100,alpha=0.3,beta=0.4,disp=0):
-        #TODO number_perturbation
+        #TODO number_perturbation--simulated annealing?
         fbest = np.inf
         best = None
         for i in range(restart):
@@ -216,13 +216,7 @@ class Tour:
         assert(i >= 0)
         assert(j < self.mlt.n-1)
         assert(self.subseq is not None)
-        """useless !?
-        oi = self.order[i]
-        oj = self.order[j]
-        order = self.order[:]
-        order[i] = oj
-        order[j] = oi
-        """
+
         if i == 0:
             seq = self.subseq[j,j+1]
         else:
@@ -263,6 +257,23 @@ class Tour:
 
         return seq.to_tour()
 
+    def rev_mid(self,i,j):
+        """
+        reverses the order of elements from pos i to pos j-1
+        """
+        assert(self.subseq is not None)
+        assert(i < j-1)
+        assert(i >= 0)
+        assert(j <= self.mlt.n-1)
+        if i == 0:
+            seq = ~self.subseq[i,j]
+        else:
+            seq = self.subseq[0,i] + (~self.subseq[i,j])
+        if j < self.mlt.n-1:
+            seq = seq +  self.subseq[j,self.mlt.n-1]
+
+        return seq.to_tour()
+
     def iter_neighbours(self,neighboorhood):
         if neighboorhood == 'swap':
             for i in range(self.mlt.n-2):
@@ -276,19 +287,24 @@ class Tour:
                         continue
                     else:
                         yield self.reinsert(i,j,k)
+        elif neighboorhood == '2opt':
+            for i in range(self.mlt.n-3):
+                for j in range(i+2,self.mlt.n-1):
+                    yield self.rev_mid(i,j)
 
 class Subsequence:
     """
     A subsequence of a tour
     """
-    def __init__(self,mlt,order,latency=None,wlatency=None):
+    def __init__(self,mlt,order,latency=None,wlatency=None,wgt=None):
         self.mlt = mlt
         self.order = order
-        if latency is None or wlatency is None:
+        if latency is None or wlatency is None or wgt is None:
             self.compute_latencies()
         else:
             self.latency = latency
             self.wlatency = wlatency
+            self.wgt = wgt
 
     def __repr__(self):
         return '<Subsequence with nodes '+str(self.order)+' >'
@@ -297,18 +313,21 @@ class Subsequence:
         latency = 0.
         weighted_latency = 0.
         current_node = self.order[0]
+        wgt = self.mlt.weights[current_node]
 
         for j in self.order[1:]:
             latency += self.mlt.distances[current_node,j]
             weighted_latency += latency * self.mlt.weights[j]
+            wgt += self.mlt.weights[j]
             current_node = j
 
         self.wlatency = weighted_latency
         self.latency = latency
+        self.wgt = wgt
 
     def __add__(self,next_sub):
         """
-        concatenation of two subsequences
+        +operator: concatenation of two subsequences
         """
         u = self.order[-1]
         v = next_sub.order[0]
@@ -316,7 +335,16 @@ class Subsequence:
         end_weight = sum([self.mlt.weights[i] for i in next_sub.order])
         lat = init_distance + next_sub.latency
         wlat = self.wlatency + next_sub.wlatency + init_distance * end_weight
-        return Subsequence(self.mlt,self.order+next_sub.order,lat,wlat)
+        wg = self.wgt + next_sub.wgt
+        return Subsequence(self.mlt,self.order+next_sub.order,lat,wlat,wg)
+
+    def __invert__(self):
+        """
+        ~operator: makes tour in reverse order
+        """
+        rev = self.order[::-1]
+        wlat= self.wgt * self.latency - self.wlatency
+        return Subsequence(self.mlt,rev,self.latency,wlat,self.wgt)
 
     def to_tour(self):
         """
@@ -327,9 +355,6 @@ class Subsequence:
         lat = self.latency + d1 + d2
         wlat = self.wlatency + d1 * sum(self.mlt.weights) + (self.latency + d2) * self.mlt.weights[0]
         return Tour(self.mlt,self.order,lat,wlat)
-
-
-
 
 """
 #----------------------#
@@ -393,6 +418,35 @@ t.preprocess_subsequences()
 t.order
 ri = t.reinsert(2,6)
 Tour(mlt,ri.order)
+
+#-----------------#
+#  2-opt          #
+#-----------------#
+
+t = constructed_tour
+t.preprocess_subsequences()
+t.order
+topt = t.rev_mid(2,8)
+Tour(mlt,topt.order)
+
+
+#for fast comp:
+'''
+1 2 3 4
+L
+W = w2 l12 + w3 l13 + w4 l14
+
+W = w3 l43 + w2 l42 + w1 l41
+ = w3 (L-l13) + w2 (L-l12) + w1 L
+  = L(w1+w2+w3) - l13w3 -l12w2
+  = L(Sw-w4) - W + Lw4
+  = sum(w) L - W
+
+123  4567  89
+-->
+123  rev   89
+'''
+
 
 #----------------#
 # test optimize  #

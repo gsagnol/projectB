@@ -122,7 +122,10 @@ P.minimize(obj)
 #----------------------------------------#
 #  try to build cluster with Thin_Kmeans #
 #----------------------------------------#
-tkm = bc.Thin_Kmeans(gifts,100,1.05)
+gifts = pd.read_csv('../input/gifts.csv')
+thinf = 20
+fullf = 1.02
+tkm = bc.Thin_Kmeans(gifts,thinf,fullf)
 tkm.run_thinkmeans()
 
 #draw clusters
@@ -136,14 +139,15 @@ x,y = m(gifts.Longitude.values,gifts.Latitude.values)
 m.scatter(x,y,color=colors[tkm.Xto])
 
 
-f = open('../clusters/tkmeans_100_{0}'.format(tkm.K),'w')
+f = open('../clusters/tkmeans_{0}_{1}'.format(thinf,tkm.K),'w')
 f.write(str(tkm.Xto.tolist()))
 f.close()
 
 #----------------------------------------------------#
 #  Allocate points to centroids with Cluster_Builder #
 #----------------------------------------------------#
-cb = bc.Cluster_Builder(tkm.X,tkm.centroids,bc.Thin_Metric(50.),gifts.Weight.values)
+thinf2 = 20
+cb = bc.Cluster_Builder(tkm.X,tkm.centroids,bc.Thin_Metric(thinf2),gifts.Weight.values)
 cb.compute_initial_allocation()
 
 Xto2 = np.zeros(cb.N).tolist()
@@ -153,7 +157,7 @@ for k in cb.clusters:
 
 clusters = {c:[i+1 for i in cb.clusters[c]] for c in cb.clusters}
 
-f = open('../clusters/greedy_tkmeans_100_50_{0}'.format(tkm.K),'w')
+f = open('../clusters/greedy_tkmeans_{0}_{1}_{2}'.format(thinf,thinf2,cb.K),'w')
 f.write(str(clusters))
 f.close()
 
@@ -169,7 +173,11 @@ m.scatter(x,y,color=colors[Xto2],s=1)
 #savefig('tst.png',dpi=500,bbox_inches='tight')
 
 
-#distrubution of trip weights: Toom many 'light trips' -> TODO merge procedure
+cb = bc.Cluster_Builder(tkm.X,None,bc.Thin_Metric(thinf2),gifts.Weight.values,clusters,gifts)
+
+
+
+#distrubution of trip weights: Too many 'light trips' -> TODO merge procedure
 figure(3)
 hist(cb.weight_per_cluster.values(),20)
 #distribution of trip height and width

@@ -18,20 +18,31 @@ class Cluster_Builder:
     """
     Given centroids, this class assigns the gifts to cluster, while respecting the knapsack constraint,
     and must try to minimize the distance ``metric`` from point to centroids
+
+    can also be initialized with predetermined cluster, to optimize them
     """
-    def __init__(self,X,centroids,metric,weights):
-        self.centroids = centroids
+    def __init__(self,X,centroids,metric,weights,clusters=None,gifts = None):
         self.metric = metric
         self.weights = np.array(weights)
-        self.K = len(centroids)
         self.N = len(X)
         self.X = X
-        self.clusters = {k:[] for k in range(self.K)}
-        self.weight_per_cluster = {k:0. for k in range(self.K)}
-        self.to_assign = np.random.permutation(range(self.N)).tolist()
+        self.gifts = gifts
+
+        if clusters is None:
+            self.centroids = centroids
+            self.K = len(centroids)
+            self.clusters = {k:[] for k in range(self.K)}
+            self.weight_per_cluster = {k:0. for k in range(self.K)}
+        else:
+            self.clusters = {c:[i-1 for i in clusters[c]] for c in clusters}
+            self.K = len(clusters)
+            self.to_assign = []
+            self.update_stats()
 
     def compute_initial_allocation(self,disp_progress = True):
-        
+
+        self.to_assign = np.random.permutation(range(self.N)).tolist()
+
         if disp_progress:
             prog = ProgressBar(0, len(self.to_assign), 77, mode='fixed')
             oldprog = str(prog)
@@ -58,6 +69,43 @@ class Cluster_Builder:
 
             if not(self.to_assign):
                 break
+            
+    def update_stats(self):
+        assert(self.gifts is not None)
+        wgt = {}
+        height = []
+        width = []
+        centroids = []
+        avdists = {}
+        num_per_cluster = {}
+        for k in range(self.K):
+            lamax = self.gifts.loc[self.clusters[k]].Latitude.max()
+            lamin = self.gifts.loc[self.clusters[k]].Latitude.min()
+            lamean = self.gifts.loc[self.clusters[k]].Latitude.mean()
+            #TODO might cause problem for clusters from both sides of the 'date change line'
+            lomean = self.gifts.loc[self.clusters[k]].Longitude.mean()
+            centroids.append(np.array([lamean,lomean]))
+            height.append(AVG_EARTH_RADIUS * np.pi/180 * (lamax-lamin))
+            widths = []
+            sumd = 0.
+            for la,lo in zip(self.gifts.loc[self.clusters[k]].Latitude,self.gifts.loc[self.clusters[k]].Longitude):
+                dlo = abs((lo-lomean+180)%360 -180) * np.pi/180
+                widths.append(AVG_EARTH_RADIUS * dlo * np.cos(la*np.pi/180.))
+                sumd += self.metric(centroids[-1],(la,lo))
+
+            width.append(np.mean(widths)*2)
+            wgt[k] = sum([self.weights[i] for i in self.clusters[k]])
+            num_per_cluster[k] = len(self.clusters[k])
+            avdists[k] = sumd/float(num_per_cluster[k])
+
+
+        self.height_distribution = height
+        self.width_distribution = width
+        self.weight_per_cluster = wgt
+        self.centroids = np.array(centroids)
+        self.average_dists_to_centroid = avdists
+        self.num_per_cluster = num_per_cluster
+        
 
 class Thin_Metric:
     def __init__(self,thin_factor):
