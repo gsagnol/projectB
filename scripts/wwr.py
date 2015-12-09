@@ -38,7 +38,8 @@ def weighted_reindeer_weariness(all_trips):
 
 
 gifts = pd.read_csv('../input/gifts.csv')
-sample_sub = pd.read_csv('../input/sample_submission.csv')
+#sample_sub = pd.read_csv('../input/sample_submission.csv')
+sample_sub = pd.read_csv('../solutions/sol1.csv')
 
 all_trips = sample_sub.merge(gifts, on='GiftId')
 

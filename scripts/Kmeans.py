@@ -16,7 +16,7 @@ __date__ = "2011-11-17 Nov denis"
     # vs unsupervised / semi-supervised svm
 
 #...............................................................................
-def kmeans( X, centres, delta=.001, maxiter=10, metric="euclidean", p=2, verbose=1 ):
+def kmeans( X, centres, delta=.001, maxiter=10, metric="euclidean", p=2, verbose=1, restrict_comp_to_close = False ):
     """ centres, Xtocentre, distances = kmeans( X, initial centres ... )
     in:
         X N x dim  may be sparse
@@ -50,7 +50,7 @@ def kmeans( X, centres, delta=.001, maxiter=10, metric="euclidean", p=2, verbose
     allx = np.arange(N)
     prevdist = 0
     for jiter in range( 1, maxiter+1 ):
-        if metric.startswith('mydist'):
+        if isinstance(metric,str) and metric.startswith('mydist'):
             a = float(metric.split(':')[1])
             mydis = lambda x,y: 0.5*( a*haversine(x,(x[0],y[1])) + haversine(y,(x[0],y[1]))) + 0.5*(haversine(x,(y[0],x[1])) + a*haversine(y,(y[0],x[1])))
             D = cdist(X,centres)
@@ -58,8 +58,21 @@ def kmeans( X, centres, delta=.001, maxiter=10, metric="euclidean", p=2, verbose
             xtoc = np.array([close[i][np.argmin(cdist(np.atleast_2d(X[i]),centres[close[i]],mydis))]
                              for i in range(N)])
         else:
-            D = cdist_sparse( X, centres, metric=metric, p=p )  # |X| x |centres|
-            xtoc = D.argmin(axis=1)  # X -> nearest centre
+            if restrict_comp_to_close:
+                D = cdist(X,centres)
+                if verbose >= 2:
+                    print 'restrict attention to close centroids...'
+                close = np.argsort(D,axis=1)[:,:10]
+                D = np.inf*np.ones((N,k))
+                if verbose >= 2:
+                    print 'computing distance to close centroids...'
+                for i in range(N):
+                    D[i,close[i]] = cdist(np.atleast_2d(X[i]),centres[close[i]],metric)
+                print 'done. Assigning points to closest centroid...'
+                xtoc = D.argmin(axis=1) 
+            else:
+                D = cdist_sparse( X, centres, metric=metric, p=p )  # |X| x |centres|
+                xtoc = D.argmin(axis=1)  # X -> nearest centre
         distances = D[allx,xtoc]
         avdist = distances.mean()  # median ?
         if verbose >= 2:

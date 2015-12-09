@@ -98,7 +98,7 @@ class MLT:
         NL = NLinit[:]
         tour.preprocess_subsequences()
         it = 0
-        if disp:
+        if disp>=2:
             print it,tour.wlatency
         while NL:
             it+=1
@@ -116,7 +116,7 @@ class MLT:
                 tour = best
                 NL = NLinit[:]
                 tour.preprocess_subsequences()
-            if disp:
+            if disp>=2:
                 print it,tour.wlatency
         return tour
 
@@ -138,7 +138,7 @@ class MLT:
             if tour.wlatency < fbest:
                 fbest = tour.wlatency
                 best = tour
-            if disp:
+            if disp>=1:
                 print 'Best tour after {0} restart(s): {1}'.format(i+1,fbest)
                 print '-----------------------------------'
         return best
