@@ -2,6 +2,7 @@
 #
 #srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_50_1480 --solution sol1.csv --tours 1,100 --range
 #
+import os.path
 import sys
 import sub_mlp as subMLT
 import gflags
@@ -61,7 +62,14 @@ print '---------------'
 print 'Optimization done- storing the results in '+'../solutions/'+FLAGS.solution_file
 print '---------------'
 
-new_sol = pd.read_csv('../solutions/'+FLAGS.solution_file)
+solfile = '../solutions/'+FLAGS.solution_file
+if os.path.isfile(solfile):
+    new_sol = pd.read_csv(solfile)
+else:
+    tmp = open(solfile,'w')
+    tmp.write('GiftId,TripId\n')
+    tmp.close()
+    new_sol = pd.read_csv(solfile)
 for c in tours:
     new_sol = new_sol.drop(new_sol[new_sol.TripId==c].index)
     try:

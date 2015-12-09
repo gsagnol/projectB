@@ -1,3 +1,5 @@
+#usage: python check_sol.py <solution_file>.csv
+
 north_pole = (90,0)
 weight_limit = 1000
 sleigh_weight = 10
@@ -6,6 +8,7 @@ sleigh_weight = 10
 import pandas as pd
 import numpy as np
 from haversine import haversine
+import sys
 
 def weighted_trip_length(stops, weights): 
     tuples = [tuple(x) for x in stops.values]
@@ -33,14 +36,19 @@ def weighted_reindeer_weariness(all_trips):
         this_trip = all_trips[all_trips.TripId==t]
         dist = dist + weighted_trip_length(this_trip[['Latitude','Longitude']], this_trip.Weight.tolist())
     
-    return dist    
+    return len(uniq_trips),dist    
 
 
 
 gifts = pd.read_csv('../input/gifts.csv')
 #sample_sub = pd.read_csv('../input/sample_submission.csv')
-sample_sub = pd.read_csv('../solutions/sol1.csv')
 
-all_trips = sample_sub.merge(gifts, on='GiftId')
+solfile = '../solutions/'+sys.argv[1]
+solution = pd.read_csv(solfile)
 
-print(weighted_reindeer_weariness(all_trips))
+all_trips = solution.merge(gifts, on='GiftId')
+
+print str(len(all_trips))+' Items'
+trips,wrw = weighted_reindeer_weariness(all_trips)
+print str(trips)+' Trips'
+print 'obj:'+str(wrw)
