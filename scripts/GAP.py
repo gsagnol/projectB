@@ -123,8 +123,8 @@ P.minimize(obj)
 #  try to build cluster with Thin_Kmeans #
 #----------------------------------------#
 gifts = pd.read_csv('../input/gifts.csv')
-thinf = 20
-fullf = 1.02
+thinf = 80
+fullf = 1.04
 tkm = bc.Thin_Kmeans(gifts,thinf,fullf)
 tkm.run_thinkmeans()
 
@@ -146,7 +146,7 @@ f.close()
 #----------------------------------------------------#
 #  Allocate points to centroids with Cluster_Builder #
 #----------------------------------------------------#
-thinf2 = 20
+thinf2 = 80
 cb = bc.Cluster_Builder(tkm.X,tkm.centroids,bc.Thin_Metric(thinf2),gifts.Weight.values)
 cb.compute_initial_allocation()
 

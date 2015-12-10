@@ -1,15 +1,30 @@
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_A.csv --tours 0,100 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_B.csv --tours 101,200 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_C.csv --tours 201,300 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_D.csv --tours 301,400 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_E.csv --tours 401,500 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_F.csv --tours 501,600 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_G.csv --tours 601,700 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_H.csv --tours 701,800 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_I.csv --tours 801,900 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_J.csv --tours 901,1000 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_K.csv --tours 1001,1100 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_L.csv --tours 1101,1200 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_M.csv --tours 1201,1300 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_N.csv --tours 1301,1400 --range --restart 8
-srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_20_20_1438 --solution sol2_O.csv --tours 1401,1437 --range --restart 8
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_A.csv --tours 0,100 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_B.csv --tours 101,200 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_C.csv --tours 201,300 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_D.csv --tours 301,400 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_E.csv --tours 401,500 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_F.csv --tours 501,600 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_G.csv --tours 601,700 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_H.csv --tours 701,800 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_I.csv --tours 801,900 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_J.csv --tours 901,1000 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_K.csv --tours 1001,1100 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_L.csv --tours 1101,1200 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_M.csv --tours 1201,1300 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_N.csv --tours 1301,1400 --range --restart 8 &
+
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_100_100_1459 --solution sol3_O.csv --tours 1401,1437 --range --restart 8 &
+
