@@ -119,6 +119,22 @@ for k in range(K):
 P.minimize(obj)
 '''
 
+#----------------------------------#
+# Compute Lower Bound for problem  #
+#----------------------------------#
+
+gifts = pd.read_csv('../input/gifts.csv')
+wgt = gifts.Weight.values
+latitude = gifts.Latitude.values
+d_from_pole = AVG_EARTH_RADIUS * (90-latitude)*np.pi/180.
+
+cl = bc.Cluster('greedy_tkmeans_100_50_1480',gifts)
+cl.compute_wgt_per_cluster()
+cl.lower_bound_per_cluster()
+#this is the best we can hope with these clusters :
+sum(cl.bound_per_cluster.values())
+
+
 #----------------------------------------#
 #  try to build cluster with Thin_Kmeans #
 #----------------------------------------#
@@ -181,20 +197,51 @@ cb = bc.Cluster_Builder(tkm.X,None,bc.Thin_Metric(thinf2),gifts.Weight.values,cl
 figure(3)
 hist(cb.weight_per_cluster.values(),20)
 #distribution of trip height and width
-height = []
-width = []
-for k in range(tkm.K):
-    lamax = gifts.loc[cb.clusters[k]].Latitude.max()
-    lamin = gifts.loc[cb.clusters[k]].Latitude.min()
-    lomean = gifts.loc[cb.clusters[k]].Longitude.mean()
-    height.append(AVG_EARTH_RADIUS * np.pi/180 * (lamax-lamin))
-    widths = []
-    for la,lo in zip(gifts.loc[cb.clusters[k]].Latitude,gifts.loc[cb.clusters[k]].Longitude):
-        dlo = abs((lo-lomean+180)%360 -180) * np.pi/180
-        widths.append(AVG_EARTH_RADIUS * dlo * np.cos(la*np.pi/180.))
-    width.append(mean(widths)*2)
-        
+cb.gifts = gifts
+cb.update_stats()
 figure(4)
-hist(height,20)
+hist(cb.height_distribution,20)
 figure(5)
-hist(width,20)
+hist(cb.width_distribution,20)
+
+#-----------------------------------------------------------#
+#  Test with the Essau-Williams heuristic for capacited MST #
+#-----------------------------------------------------------#
+
+import build_clusters as bc
+cmst = bc.Capactited_MST(gifts)  
+maxmove = 1000
+cmst.essau_williams(maxmove)
+#TODO problem: some points disappear through iterations: check!
+
+clusters = {}
+for i,v in enumerate(cmst.subtrees.values()):
+    clusters[i] = [vi+1 for vi in v]
+
+Xto3 = np.zeros(cmst.N).tolist()
+for k in clusters:
+    for i in clusters[k]:
+        Xto3[i] = int(k)
+
+#-------------------------------------------------------------------#
+# TODO simple k means in cart. coordinate on a very flat ellipsoid  #
+#-------------------------------------------------------------------#
+
+def to_cartesian(x):
+    a = 50.
+    phi = (90-x[0]) * np.pi/180.
+    theta = x[1] * np.pi/180.
+    sphi = np.sin(phi)
+    return np.array([a*sphi*np.cos(theta),a*sphi*np.sin(theta),np.cos(phi)])
+
+X = gifts[['Latitude','Longitude']].values
+Z = np.apply_along_axis(to_cartesian,1,X)
+
+import sklearn.cluster
+centroids,labels,inertia=sklearn.cluster.k_means(Z,1460,verbose=True,n_init=3)
+
+clusters = {}
+for i,k in enumerate(labels):
+    clusters.setdefault(k,[])
+    clusters[k].append(i+1)
+    
