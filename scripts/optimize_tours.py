@@ -62,6 +62,7 @@ print '---------------'
 print 'Optimization done- storing the results in '+'../solutions/'+FLAGS.solution_file
 print '---------------'
 
+
 solfile = '../solutions/'+FLAGS.solution_file
 if os.path.isfile(solfile):
     new_sol = pd.read_csv(solfile)
@@ -70,8 +71,14 @@ else:
     tmp.write('GiftId,TripId\n')
     tmp.close()
     new_sol = pd.read_csv(solfile)
+
 for c in tours:
     new_sol = new_sol.drop(new_sol[new_sol.TripId==c].index)
+
+import copy
+sol0 = copy.deepcopy(new_sol)
+
+for c in tours:
     try:
         ind = max(new_sol.index)+1
     except ValueError:
@@ -85,6 +92,11 @@ def convert_to_integers(x):
         return x.astype(int)
     except:
         return x
+
+if len(new_sol)-len(sol0) == sum([len(clusters[c]) for c in tours]):
+    print 'length OK'
+else:
+    import pdb;pdb.set_trace()
 
 new_sol.apply(convert_to_integers).to_csv('../solutions/'+FLAGS.solution_file,index=False)
 
