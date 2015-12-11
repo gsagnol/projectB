@@ -131,17 +131,21 @@ class Thin_Kmeans:
 class Cluster:
     """
     A class for trips (group of gifts < 1000 kg)
-    Gifts are with id from 0 to make in simpler, but ``save()`` writes the true IDs in the file
+    Gifts are with id from 0 to make it simpler, but ``save()`` writes the true IDs in the file
     """
-    def __init__(self,cluster,gifts,gifts_ID_from_0 = False):
+    def __init__(self,cluster,gifts):
         self.gifts = gifts
         if isinstance(cluster,str):
             self.load(cluster)
-            return
-        if gifts_ID_from_0:
-            self.cluster = cluster
         else:
-            self.cluster = {c: [i-1 for i in v] for c,v in cluster.iteritems()}
+            imin = min([min([vi for vi in v]) for v in cluster.values()])
+            if imin == 0:
+                self.cluster = cluster
+            elif imin==1:
+                self.cluster = {c: [i-1 for i in v] for c,v in cluster.iteritems()}
+            else:
+                raise Exception('bad cluster indices')
+        assert(min([min([vi for vi in v]) for v in self.cluster.values()]) == 0 )
 
     def save(self,name):
         clusters_from_1 = {c: [i+1 for i in v] for c,v in self.cluster.iteritems()}
@@ -169,7 +173,10 @@ class Cluster:
 
 
 class Capactited_MST:
-    def __init__(self,gifts,nb_neighbors=50):
+    def __init__(self,gifts,nb_neighbors=50,metric=None):
+        """
+        metric=None uses the chord distance
+        """
         self.gifts = gifts
         self.X = gifts[['Latitude','Longitude']].values
         self.N = len(self.X)
@@ -184,12 +191,19 @@ class Capactited_MST:
         self.Z = np.apply_along_axis(self.to_cartesian,1,self.X)
         #distance from north pole to root points
         to_pole = cdist(np.atleast_2d(self.to_cartesian(north_pole)),self.Z)
-        self.gates = to_pole[0].tolist()
+        if metric is None:
+            self.gates = to_pole[0].tolist()
+        else:
+            if isinstance(metric,Thin_Metric):
+                self.gates = (AVG_EARTH_RADIUS * to_pole[0]).tolist()
+            else:
+                self.gates = cdist(np.atleast_2d(north_pole),self.X)[0].to_list()
         self.subtree_costs = {i:self.gates[i] for i in range(self.N)}
         self.total_cost = sum(self.subtree_costs.values())
         self.nb_neighbors = nb_neighbors
         import sklearn.neighbors
         self.kdtree = sklearn.neighbors.KDTree(self.Z)
+        self.metric=metric
 
 
     def to_cartesian(self,x):
@@ -202,10 +216,23 @@ class Capactited_MST:
         close = self.kdtree.query(self.Z[i],self.nb_neighbors)
         rooti = self.Xto[i]
         wgti = self.subtree_weights[rooti]
-        for d,ind in zip(close[0][0][1:],close[1][0][1:]):
-            rootind = self.Xto[ind]
-            if rooti!=rootind and wgti + self.subtree_weights[rootind] <= weight_limit:
-                return d,ind
+        if self.metric is None:
+            for d,ind in zip(close[0][0][1:],close[1][0][1:]):
+                rootind = self.Xto[ind]
+                if rooti!=rootind and wgti + self.subtree_weights[rootind] <= weight_limit:
+                    return d,ind
+        else:
+            dd = []
+            for ind in close[1][0][1:]:
+                dd.append(self.metric(self.X[ind],self.X[i]))
+            dd = np.array(dd)
+            sd = np.argsort(dd)
+            for d,ind in zip(dd[sd],close[1][0][sd]):
+                rootind = self.Xto[ind]
+                if rooti!=rootind and wgti + self.subtree_weights[rootind] <= weight_limit:
+                    return d,ind
+                
+                
         return None,None
 
     def evaluate_tradeoffs(self):
@@ -243,7 +270,7 @@ class Capactited_MST:
             sto = sorted(to)
             if sto[-1]<0:
                 print 'no more changes available. Stop.'
-                break
+                return
             nbshift = 0
             root_seen = []
             while sto and nbshift<max_shift_per_iter:

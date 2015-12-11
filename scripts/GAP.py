@@ -209,14 +209,14 @@ hist(cb.width_distribution,20)
 #-----------------------------------------------------------#
 
 import build_clusters as bc
-cmst = bc.Capactited_MST(gifts)  
+cmst = bc.Capactited_MST(gifts,metric=bc.Thin_Metric(100.))
 maxmove = 1000
 cmst.essau_williams(maxmove)
-#TODO problem: some points disappear through iterations: check!
+
 
 clusters = {}
 for i,v in enumerate(cmst.subtrees.values()):
-    clusters[i] = [vi+1 for vi in v]
+    clusters[i] = [vi for vi in v]
 
 Xto3 = np.zeros(cmst.N).tolist()
 for k in clusters:
@@ -245,3 +245,13 @@ for i,k in enumerate(labels):
     clusters.setdefault(k,[])
     clusters[k].append(i+1)
     
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.neighbors import kneighbors_graph
+knn_graph = kneighbors_graph(X, 30, include_self=False)
+model = AgglomerativeClustering(linkage='ward',connectivity=knn_graph,n_clusters=1450)
+model.fit(Z)
+
+clusters = {}
+for i,k in enumerate(model.labels_):
+    clusters.setdefault(k,[])
+    clusters[k].append(i+1)
