@@ -1,0 +1,20 @@
+{
+  "name": "visualisation",
+  "version": "1.0.0",
+  "description": "just looking at the solutions",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "csv": "^0.4.6",
+    "csv-parse": "^1.0.1",
+    "express": "^4.13.3",
+    "fast-csv": "^0.6.0",
+    "fs": "0.0.2",
+    "path": "^0.12.7"
+  }
+}

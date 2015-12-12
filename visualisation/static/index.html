@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+    <meta charset="utf-8">
+    <title>Simple Polylines</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        #map {
+            height: 100%;
+        }
+    </style>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+</head>
+<body>
+<div id="map"></div>
+<script>
+
+    var map;
+    var first = true;
+    var solution = getUrlParameter("solution");
+    var tripsLocation = {};
+    var flightPaths = [];
+    var markers = [];
+
+    function clearMapFromPaths(){
+        clearMapFromMarkers();
+        flightPaths.forEach(function(obj){
+            obj.setPath([]);
+        });
+        flightPaths = [];
+    }
+    function clearMapFromMarkers(){
+        markers.forEach(function(obj){
+            obj.setMap(null);
+        });
+        markers = [];
+    }
+
+    function initMap() {
+        map = new google.maps.Map(document.getElementById('map'), {
+            zoom: 2,
+            center: {lat: 0, lng: 0},
+            mapTypeId: google.maps.MapTypeId.TERRAIN
+        });
+
+        google.maps.event.addListener(map, "click", function(event) {
+            var lat = event.latLng.lat();
+            var lng = event.latLng.lng();
+            if(first){
+                tripsLocation[0] = {lat: lat, lng: lng};
+            }else{
+                tripsLocation[1] = {lat: lat, lng: lng};
+                clearMapFromPaths();
+                $.getJSON( "/solutions/" + solution + "/trips/", {
+                    maxLon: Math.max(tripsLocation[0]["lng"],tripsLocation[1]["lng"]),
+                    maxLat: Math.max(tripsLocation[0]["lat"],tripsLocation[1]["lat"]),
+                    minLon: Math.min(tripsLocation[0]["lng"],tripsLocation[1]["lng"]),
+                    minLat: Math.min(tripsLocation[0]["lat"],tripsLocation[1]["lat"])
+                }, function(data) {
+                    data.forEach(function(tripId){
+                        displayTrip(solution, tripId)
+                    });
+                });
+            }
+            first = !first;
+        });
+    }
+
+    function loadMarkers(data){
+        clearMapFromMarkers();
+        data.forEach(function(obj, i){
+            var orderInTrip = i+1;
+            var myLatlng = new google.maps.LatLng(obj["Latitude"],obj["Longitude"]);
+            var infowindow = new google.maps.InfoWindow({
+                content: "weight: " + obj["Weight"] + " kg<br>lon:" + obj["Longitude"] + "<br>lat: " + obj["Latitude"]
+            });
+            var marker = new google.maps.Marker({
+                position: myLatlng,
+                icon: 'http://chart.apis.google.com/chart?chst=d_map_pin_letter&chld='+orderInTrip+'|FE6256|000000',
+                title: data["Weight"]
+            });
+            marker.addListener('click', function() {
+                infowindow.open(map, marker);
+            });
+            markers.push(marker);
+            marker.setMap(map);
+        });
+    }
+
+    function displayTrip(solution, tripId){
+        $.getJSON( "/solutions/" + solution + "/trips/" + tripId, function(data) {
+            var flightPlanCoordinates = data.map(function(obj){
+                return {lat: obj["Latitude"], lng: obj["Longitude"]}
+            });
+
+            var flightPath = new google.maps.Polyline({
+                path: flightPlanCoordinates,
+                geodesic: true,
+                strokeColor: '#'+(Math.random()*0xFFFFFF<<0).toString(16),
+                strokeOpacity: 1.0,
+                strokeWeight: 2
+            });
+            flightPaths[tripId] = flightPath;
+            google.maps.event.addListener(flightPath, 'click', function() {
+                loadMarkers(data);
+            });
+            flightPath.setMap(map);
+        });
+    }
+
+    function getUrlParameter(sParam) {
+        var sPageURL = decodeURIComponent(window.location.search.substring(1)),
+                sURLVariables = sPageURL.split('&'),
+                sParameterName,
+                i;
+
+        for (i = 0; i < sURLVariables.length; i++) {
+            sParameterName = sURLVariables[i].split('=');
+
+            if (sParameterName[0] === sParam) {
+                return sParameterName[1] === undefined ? true : sParameterName[1];
+            }
+        }
+    }
+
+
+
+</script>
+<script async defer
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCtr7u-ldVpJeC7yIhZGK1rk6zn399pqPQ&signed_in=true&callback=initMap"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+*.iml
+*.pyc
+visualisation/node_modules
+.idea
+.ipynb_checkpoints
+*.ipynb
