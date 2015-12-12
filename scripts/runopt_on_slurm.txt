@@ -28,5 +28,4 @@ srun -p opt -A traffic python optimize_tours.py --filename essau_williams_thin -
 
 srun -p opt -A traffic python optimize_tours.py --filename essau_williams_thin --solution sol_essauWilliamsThin_O.csv --tours 1401,1437 --range --restart 8 &
 
-git mv sol1_merged.csv solgdy_tkmeans_100_50_1480.csv
-
+srun -p opt -A traffic python optimize_tours.py --filename greedy_tkmeans_80_80_1466 --solution solgdy_80_80_1466_I.csv --tours 801,900 --range --restart 8 &
