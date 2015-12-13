@@ -81,7 +81,7 @@ class MLT:
         current_node = 0
         candidates = range(1,self.n)
         tour = []
-        while True:
+        while len(candidates)>1:
             dist_from_current = [(self.distances[current_node,i]/(self.weights[i]**beta),i) for i in candidates]
             sorted_from_current = np.array(sorted(dist_from_current))
             max_index = np.searchsorted(sorted_from_current[:,0],(1.+alpha)*sorted_from_current[0,0])

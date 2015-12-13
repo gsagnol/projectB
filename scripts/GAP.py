@@ -154,7 +154,6 @@ colors = np.random.rand(tkm.K,3)
 x,y = m(gifts.Longitude.values,gifts.Latitude.values)
 m.scatter(x,y,color=colors[tkm.Xto])
 
-
 f = open('../clusters/tkmeans_{0}_{1}'.format(thinf,tkm.K),'w')
 f.write(str(tkm.Xto.tolist()))
 f.close()
