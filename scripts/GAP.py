@@ -254,3 +254,32 @@ clusters = {}
 for i,k in enumerate(model.labels_):
     clusters.setdefault(k,[])
     clusters[k].append(i+1)
+
+#----------------------------------------#
+#     greedy with respect to bound
+#----------------------------------------#
+
+X = gifts[['Latitude','Longitude']].values
+f = open('../clusters/tkmeans_80_1466','r')
+Xto = eval(f.read())
+f.close()
+clusters = {}
+for i,k in enumerate(Xto):
+    clusters.setdefault(k,[])
+    clusters[k].append(i)
+
+centroids = []
+for k,gk in clusters.iteritems():
+    centroids.append(np.mean(X[gk],axis=0))
+centroids = np.array(centroids)
+
+cb = bc.Cluster_Builder(X,centroids,None,gifts.Weight.values)
+cb.greedy_for_bound()
+
+#test naive speed (thats really slow...)
+tab = []
+for it,i in enumerate(cb.to_assign):
+    if it%1000==0:print it
+    for k in range(cb.K):
+        tab.append((cb.bound_increase_for_adding_gift_in_cluster(i,k),i,k))
+
