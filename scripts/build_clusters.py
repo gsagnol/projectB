@@ -121,7 +121,7 @@ class Cluster_Builder:
             self.latencies_in_cluster[k] = [self.distances_to_pole[gift]]
             self.clusters[k].append(gift)
             self.weight_per_cluster[k] = self.weights[gift]
-            self.cost_per_cluster[k] = (self.weights[gift]+2*sleigh_weight) * self.latencies_in_cluster[k]
+            self.cost_per_cluster[k] = (self.weights[gift]+2*sleigh_weight) * self.distances_to_pole[gift]
             self.to_assign.remove(gift)
 
 
@@ -142,12 +142,12 @@ class Cluster_Builder:
             #add gift in last position
             delta_latency = latency_i - self.latencies_in_cluster[k][j-1]
             delta_d = dpole_i - self.distances_to_pole[self.clusters[k][-1]]
-            return self.weights[i]*(latency_i-1.02 * dpole_i) + sleigh_weight * (delta_latency + delta_d)
+            return self.weights[i]*(latency_i - dpole_i) + sleigh_weight * (delta_latency + delta_d)
         else:
             next_gift = self.clusters[k][j]
             delta_latency = latency_i +  haversine(self.X[next_gift],self.X[i]) - self.latencies_in_cluster[k][j]
             weight_after_j = sum(self.weights[self.clusters[k][j:]])
-            return self.weights[i]*(latency_i-1.02 * dpole_i) + delta_latency * (weight_after_j + sleigh_weight)
+            return self.weights[i]*(latency_i - dpole_i) + delta_latency * (weight_after_j + sleigh_weight)
 
     def add_in_tour(self,giftID,centroidID):
         i,k = giftID,centroidID
@@ -156,7 +156,7 @@ class Cluster_Builder:
             raise Exception('cluster was not initialized')
         lati,longi = self.X[i]
         dpole_i = self.distances_to_pole[i]
-        j = n-np.searchsorted(self.latitudes_in_cluster[k],lati)
+        j = n-np.searchsorted(self.latitudes_in_cluster[k][::-1],lati)
         if j==0:
             latency_i = dpole_i
         else:
@@ -172,9 +172,10 @@ class Cluster_Builder:
             delta_latency = latency_i +  haversine(self.X[next_gift],self.X[i]) - self.latencies_in_cluster[k][j]
             weight_after_j = sum(self.weights[self.clusters[k][j:]])
             delta_d = 0.
-        
+
         self.clusters[k].insert(j,i)
         self.latitudes_in_cluster[k].insert(j,lati)
+
         for jj in range(j,n):
             self.latencies_in_cluster[k][jj]+=delta_latency
         
@@ -183,11 +184,23 @@ class Cluster_Builder:
         self.weight_per_cluster[k]+= self.weights[i]
         
         self.cost_per_cluster[k] +=  self.weights[i]*latency_i+ (weight_after_j + sleigh_weight) * delta_latency + sleigh_weight * delta_d
-        
-        
 
+    def create_new_cluster(self,i):
+        kk = np.searchsorted(self.centroids[:,1],self.X[i][1])
+        for k in range(self.K,kk,-1):
+            self.clusters[k] = self.clusters[k-1][:]
+            self.weight_per_cluster[k] = self.weight_per_cluster[k-1]
+            self.latitudes_in_cluster[k] = self.latitudes_in_cluster[k-1][:]
+            self.latencies_in_cluster[k] = self.latencies_in_cluster[k-1][:]
+            self.cost_per_cluster[k] = self.cost_per_cluster[k-1]
 
-        
+        self.K += 1
+        self.centroids = np.insert(self.centroids, kk, self.X[i],axis=0)
+        self.clusters[kk] = [i]
+        self.latitudes_in_cluster[kk] = [self.X[i][0]]
+        self.latencies_in_cluster[kk] = [self.distances_to_pole[i]]
+        self.weight_per_cluster[kk] = self.weights[i]
+        self.cost_per_cluster[kk] = (self.weights[i]+2*sleigh_weight) * self.distances_to_pole[i]
 
     def greedy_for_bound(self,disp_progress=True):
         print 'initialization...'
@@ -197,6 +210,9 @@ class Cluster_Builder:
             self.centroids = np.array(sorted(self.centroids, key=lambda x: x[1]))
             
         self.init_clusters_with_centroids()
+        print 'sorting gifts per longitude...'
+        self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,1])]
+        self.to_assign = self.to_assign.tolist()
         print 'done.'
         
         if disp_progress:
@@ -214,23 +230,30 @@ class Cluster_Builder:
                 #-->
         
             i = self.to_assign.pop()
-            km = np.searchsorted(self.centroids[:,1], self.X[i][1]-15)
-            kp = np.searchsorted(self.centroids[:,1], self.X[i][1]+15)
+            km = np.searchsorted(self.centroids[:,1], self.X[i][1]-40)
+            kp = np.searchsorted(self.centroids[:,1], self.X[i][1]+40)
             
             bounds_inc = [(self.bound_increase_for_adding_gift_in_cluster(i,k),k) for k in range(km,kp)]
             sorted_bounds_inc = sorted(bounds_inc)
+            assigned = False
             for inc,c in sorted_bounds_inc:
-                if self.weight_per_cluster[c]+self.weights[i]<weight_limit:
-                    self.clusters[c].append(i)
-                    self.weight_per_cluster[c]+=self.weights[i]
+                if inc> 2*self.distances_to_pole[i]*sleigh_weight:
+                    self.create_new_cluster(i)
+                    assigned = True
+                    print 'one more clust '+str(self.K)
+                    if self.K>1900:
+                        import pdb;pdb.set_trace()#TMP
                     break
+                if self.weight_per_cluster[c]+self.weights[i]<weight_limit:
+                    self.add_in_tour(i,c)
+                    assigned = True
+                    break
+
+            if not assigned:
+                raise Exception('not able to assign a trip in this window of longitudes.')
 
             if not(self.to_assign):
                 break
-        
-
-        for k in range(km,kp):
-            tab.append((cb.bound_increase_for_adding_gift_in_cluster(i,k),i,k))
 
 
 class Thin_Metric:
@@ -294,8 +317,6 @@ class Cluster:
         d_from_pole = AVG_EARTH_RADIUS * (90-latitude)*np.pi/180.
         self.bound_per_cluster = {c:sum([self.wgts[i]*d_from_pole[i] for i in v]) *
                                   (1.+2*sleigh_weight/float(self.wgt_per_cluster[c])) for c,v in self.cluster.iteritems()}
-
-
 
 
 class Capactited_MST:

@@ -61,11 +61,11 @@ class MLT:
 
         for i,j in enumerate(order):
             latency += self.distances[current_node,j]
-            weighted_latency += latency * mlt.weights[j]
+            weighted_latency += latency * self.weights[j]
             current_node = j
 
         latency += self.distances[current_node,0]
-        weighted_latency += latency * mlt.weights[0]
+        weighted_latency += latency * self.weights[0]
 
         return weighted_latency,latency
 
