@@ -272,14 +272,21 @@ centroids = []
 for k,gk in clusters.iteritems():
     centroids.append(np.mean(X[gk],axis=0))
 centroids = np.array(centroids)
+#centroids must be ordered by longitude
+centroids = np.array(sorted(centroids, key=lambda x: x[1]))
 
 cb = bc.Cluster_Builder(X,centroids,None,gifts.Weight.values)
 cb.greedy_for_bound()
 
-#test naive speed (thats really slow...)
-tab = []
-for it,i in enumerate(cb.to_assign):
-    if it%1000==0:print it
-    for k in range(cb.K):
-        tab.append((cb.bound_increase_for_adding_gift_in_cluster(i,k),i,k))
 
+lodeg = 10
+updeg = 13
+candidates = [i for i in cb.to_assign if updeg>X[i][1]>lodeg]
+
+tab = []
+for it,i in enumerate(candidates):
+    if it%1000==0:print it,len(candidates)
+    km = np.searchsorted(centroids[:,1], cb.X[i][1]-15)
+    kp = np.searchsorted(centroids[:,1], cb.X[i][1]+15)
+    for k in range(km,kp):
+        tab.append((cb.bound_increase_for_adding_gift_in_cluster(i,k),i,k))

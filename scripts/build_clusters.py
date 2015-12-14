@@ -19,7 +19,9 @@ class Cluster_Builder:
     Given centroids, this class assigns the gifts to cluster, while respecting the knapsack constraint,
     and must try to minimize the distance ``metric`` from point to centroids
 
-    can also be initialized with predetermined cluster, to optimize them
+    * can also be initialized with predetermined cluster, to optimize them (TODO)
+
+    * or for the greedy_bound heuristic, that sequentially adds gifts that minimize the difference with the bound 1.02w_i d_i
     """
     def __init__(self,X,centroids,metric,weights,clusters=None,gifts = None):
         self.metric = metric
@@ -50,7 +52,6 @@ class Cluster_Builder:
             prog = ProgressBar(0, len(self.to_assign), 77, mode='fixed')
             oldprog = str(prog)
 
-        
         while True:
             if disp_progress:
                 #<--display progress
@@ -128,7 +129,7 @@ class Cluster_Builder:
             raise Exception('cluster was not initialized')
         lati,longi = self.X[i]
         dpole_i = self.distances_to_pole[i]
-        j = np.searchsorted(self.latitudes_in_cluster[k],lati)
+        j = n-np.searchsorted(self.latitudes_in_cluster[k],lati)
         if j==0:
             latency_i = dpole_i
         else:
@@ -145,13 +146,11 @@ class Cluster_Builder:
             weight_after_j = sum(self.weights[self.clusters[k][j:]])
             return self.weights[i]*(latency_i-1.02 * dpole_i) + delta_latency * (weight_after_j + sleigh_weight)
 
-
     def greedy_for_bound(self):
         print 'initialization...'
         self.to_assign = np.random.permutation(range(self.N)).tolist()
         self.init_clusters_with_centroids()
         print 'done.'
-        pass#TODO
 
 
 class Thin_Metric:
