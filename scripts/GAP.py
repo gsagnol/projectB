@@ -182,9 +182,9 @@ clf()
 m = Basemap(llcrnrlon=-170,llcrnrlat=-80,urcrnrlon=190,urcrnrlat=80,projection='mill')
 m.drawcoastlines()
 m.drawcountries()
-colors = np.random.rand(tkm.K,3)
+colors = np.random.rand(cb.K,3)
 x,y = m(gifts.Longitude.values,gifts.Latitude.values)
-m.scatter(x,y,color=colors[Xto2],s=1)
+m.scatter(x,y,color=colors[Xto2],s=10)
 #savefig('tst.png',dpi=500,bbox_inches='tight')
 
 
@@ -260,33 +260,9 @@ for i,k in enumerate(model.labels_):
 #----------------------------------------#
 
 X = gifts[['Latitude','Longitude']].values
-f = open('../clusters/tkmeans_80_1466','r')
-Xto = eval(f.read())
-f.close()
-clusters = {}
-for i,k in enumerate(Xto):
-    clusters.setdefault(k,[])
-    clusters[k].append(i)
-
-centroids = []
-for k,gk in clusters.iteritems():
-    centroids.append(np.mean(X[gk],axis=0))
-centroids = np.array(centroids)
-#centroids must be ordered by longitude
-centroids = np.array(sorted(centroids, key=lambda x: x[1]))
-
-cb = bc.Cluster_Builder(X,centroids,None,gifts.Weight.values)
-cb.greedy_for_bound()
+cb = bc.Cluster_Builder(X,[],None,gifts.Weight.values)
+cb.greedy_for_bound(1000,direction='west')
 
 
-lodeg = 10
-updeg = 13
-candidates = [i for i in cb.to_assign if updeg>X[i][1]>lodeg]
-
-tab = []
-for it,i in enumerate(candidates):
-    if it%1000==0:print it,len(candidates)
-    km = np.searchsorted(centroids[:,1], cb.X[i][1]-15)
-    kp = np.searchsorted(centroids[:,1], cb.X[i][1]+15)
-    for k in range(km,kp):
-        tab.append((cb.bound_increase_for_adding_gift_in_cluster(i,k),i,k))
+cl = bc.Cluster(cb.clusters,gifts)
+cl.save('greedy_South_100')

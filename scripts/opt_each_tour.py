@@ -39,6 +39,8 @@ p = FLAGS.processes
 
 for i in range(p):
     a,b =  i*(n//p+1),min((i+1)*(n//p+1),n)
+    if a>=b:
+        break
     print '**** opt on {0}--{1} ****'.format(a,b)
     command = 'python optimize_tours.py'
     if FLAGS.slurm:

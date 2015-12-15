@@ -132,7 +132,7 @@ class Cluster_Builder:
             raise Exception('cluster was not initialized')
         lati,longi = self.X[i]
         dpole_i = self.distances_to_pole[i]
-        j = n-np.searchsorted(self.latitudes_in_cluster[k],lati)
+        j = n-np.searchsorted(self.latitudes_in_cluster[k][::-1],lati)
         if j==0:
             latency_i = dpole_i
         else:
@@ -181,6 +181,7 @@ class Cluster_Builder:
         
         self.latencies_in_cluster[k].insert(j,latency_i)
         
+        self.centroids[k] = (self.centroids[k] * self.weight_per_cluster[k] + self.X[i] * self.weights[i])/(self.weights[i]+self.weight_per_cluster[k])
         self.weight_per_cluster[k]+= self.weights[i]
         
         self.cost_per_cluster[k] +=  self.weights[i]*latency_i+ (weight_after_j + sleigh_weight) * delta_latency + sleigh_weight * delta_d
@@ -202,16 +203,31 @@ class Cluster_Builder:
         self.weight_per_cluster[kk] = self.weights[i]
         self.cost_per_cluster[kk] = (self.weights[i]+2*sleigh_weight) * self.distances_to_pole[i]
 
-    def greedy_for_bound(self,disp_progress=True):
+    def greedy_for_bound(self,best_in_next = 100, direction = 'west', disp_progress=True,width=40):
         print 'initialization...'
         self.to_assign = np.random.permutation(range(self.N)).tolist()
+        '''
         if not(np.all([self.centroids[i][1]<=self.centroids[i+1][1] for i in range(len(self.centroids)-1)])):
             print 'warning: centroids were not sorted by longitude. I reorder them'
             self.centroids = np.array(sorted(self.centroids, key=lambda x: x[1]))
             
         self.init_clusters_with_centroids()
-        print 'sorting gifts per longitude...'
-        self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,1])]
+        #TODO try from east to west and from west to east
+        '''
+        self.centroids = np.zeros((0,2))
+        self.K = 0
+        
+        if direction=='west':
+            print 'sorting gifts per longitude...'
+            self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,1])]
+        elif direction=='east':
+            self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,1])[::-1]]
+        elif direction=='south':
+            self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,0])[::-1]]
+        elif direction=='north':
+            self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,0])]
+        else:
+            raise ValueError('direction not implemented')
         self.to_assign = self.to_assign.tolist()
         print 'done.'
         
@@ -229,24 +245,41 @@ class Cluster_Builder:
                         oldprog=str(prog)
                 #-->
         
-            i = self.to_assign.pop()
-            km = np.searchsorted(self.centroids[:,1], self.X[i][1]-40)
-            kp = np.searchsorted(self.centroids[:,1], self.X[i][1]+40)
             
-            bounds_inc = [(self.bound_increase_for_adding_gift_in_cluster(i,k),k) for k in range(km,kp)]
+            if self.K == 0:
+                self.create_new_cluster(self.to_assign[0])
+                del self.to_assign[0]
+                continue
+            
+            candidates = self.to_assign[:best_in_next]
+                
+            bounds_inc = []
+            for i in candidates:
+                km = np.searchsorted(self.centroids[:,1], self.X[i][1]-width)
+                kp = np.searchsorted(self.centroids[:,1], self.X[i][1]+width)
+                bounds_inc.extend([(self.bound_increase_for_adding_gift_in_cluster(i,k),i,k) for k in range(km,kp) if self.weight_per_cluster[k]+self.weights[i]<weight_limit])
+                
+            if not bounds_inc:
+                self.create_new_cluster(self.to_assign[0])
+                del self.to_assign[0]
+                continue
+                
             sorted_bounds_inc = sorted(bounds_inc)
             assigned = False
-            for inc,c in sorted_bounds_inc:
+            for inc,i,c in sorted_bounds_inc:
                 if inc> 2*self.distances_to_pole[i]*sleigh_weight:
-                    self.create_new_cluster(i)
+                    #import pdb;pdb.set_trace()
+                    self.create_new_cluster(self.to_assign[0])
                     assigned = True
-                    print 'one more clust '+str(self.K)
-                    if self.K>1900:
-                        import pdb;pdb.set_trace()#TMP
+                    del self.to_assign[0]
+                    #print 'one more clust '+str(self.K)
+                    #if self.K>1500:
+                    #    import pdb;pdb.set_trace()#TMP
                     break
                 if self.weight_per_cluster[c]+self.weights[i]<weight_limit:
                     self.add_in_tour(i,c)
                     assigned = True
+                    self.to_assign.remove(i)
                     break
 
             if not assigned:
