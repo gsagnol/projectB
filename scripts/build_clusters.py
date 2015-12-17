@@ -203,7 +203,7 @@ class Cluster_Builder:
         self.weight_per_cluster[kk] = self.weights[i]
         self.cost_per_cluster[kk] = (self.weights[i]+2*sleigh_weight) * self.distances_to_pole[i]
 
-    def greedy_for_bound(self,best_in_next = 100, direction = 'west', disp_progress=True,width=40):
+    def greedy_for_bound(self,best_in_next = 100, direction = 'west', disp_progress=True,width=40,wgpenalty=0):
         print 'initialization...'
         self.to_assign = np.random.permutation(range(self.N)).tolist()
         '''
@@ -257,7 +257,8 @@ class Cluster_Builder:
             for i in candidates:
                 km = np.searchsorted(self.centroids[:,1], self.X[i][1]-width)
                 kp = np.searchsorted(self.centroids[:,1], self.X[i][1]+width)
-                bounds_inc.extend([(self.bound_increase_for_adding_gift_in_cluster(i,k),i,k) for k in range(km,kp) if self.weight_per_cluster[k]+self.weights[i]<weight_limit])
+                bounds_inc.extend([(self.bound_increase_for_adding_gift_in_cluster(i,k),i,k)
+                                   for k in range(km,kp) if self.weight_per_cluster[k]+self.weights[i]<weight_limit-wgpenalty])
                 
             if not bounds_inc:
                 self.create_new_cluster(self.to_assign[0])
@@ -308,49 +309,6 @@ class Thin_Kmeans:
 
     def run_thinkmeans(self):
         self.centroids,self.Xto,self.dist = km.kmeans(self.X,self.init_centres,metric=self.metric,verbose=2,restrict_comp_to_close=True)
-        
-
-class Cluster:
-    """
-    A class for trips (group of gifts < 1000 kg)
-    Gifts are with id from 0 to make it simpler, but ``save()`` writes the true IDs in the file
-    """
-    def __init__(self,cluster,gifts):
-        self.gifts = gifts
-        if isinstance(cluster,str):
-            self.load(cluster)
-        else:
-            imin = min([min([vi for vi in v]) for v in cluster.values()])
-            if imin == 0:
-                self.cluster = cluster
-            elif imin==1:
-                self.cluster = {c: [i-1 for i in v] for c,v in cluster.iteritems()}
-            else:
-                raise Exception('bad cluster indices')
-        assert(min([min([vi for vi in v]) for v in self.cluster.values()]) == 0 )
-
-    def save(self,name):
-        clusters_from_1 = {c: [i+1 for i in v] for c,v in self.cluster.iteritems()}
-        f = open('../clusters/'+name,'w')
-        f.write(str(clusters_from_1))
-        f.close()
-
-    def load(self,name):
-        f = open('../clusters/'+name,'r')
-        clusters_from_1 = eval(f.read())
-        f.close()
-        self.cluster =  {c: [i-1 for i in v] for c,v in clusters_from_1.iteritems()}
-
-    def compute_wgt_per_cluster(self):
-        self.wgts = self.gifts.Weight.values
-        self.wgt_per_cluster = {c:sum([self.wgts[i] for i in v]) for c,v in self.cluster.iteritems()}
-
-    def lower_bound_per_cluster(self):
-        latitude = self.gifts.Latitude.values
-        d_from_pole = AVG_EARTH_RADIUS * (90-latitude)*np.pi/180.
-        self.bound_per_cluster = {c:sum([self.wgts[i]*d_from_pole[i] for i in v]) *
-                                  (1.+2*sleigh_weight/float(self.wgt_per_cluster[c])) for c,v in self.cluster.iteritems()}
-
 
 class Capactited_MST:
     def __init__(self,gifts,nb_neighbors=50,metric=None):
@@ -464,9 +422,3 @@ class Capactited_MST:
                     root_seen.extend([rooti,rootj])
                     nbshift += 1
             print '{0} changes done. New value: {1}'.format(nbshift,self.total_cost)
-
-
-
-
-
-

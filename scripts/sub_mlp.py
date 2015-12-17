@@ -153,14 +153,11 @@ class MLT:
                     best = tour
         return best
 
-
-
-
 class Tour:
     """
     A tour for the MLT problem, startind and ending at north pole
     """
-    def __init__(self,mlt,ordered_gifts,latency = None,wlatency = None):
+    def __init__(self,mlt,ordered_gifts,latency = None, wlatency = None):
         """
         The constructor takes a MLT problem and a list of ordered gift IDs.
         """

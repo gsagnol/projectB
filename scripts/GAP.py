@@ -128,7 +128,8 @@ wgt = gifts.Weight.values
 latitude = gifts.Latitude.values
 d_from_pole = AVG_EARTH_RADIUS * (90-latitude)*np.pi/180.
 
-cl = bc.Cluster('greedy_tkmeans_100_50_1480',gifts)
+import vrp
+cl = vrp.Solution('../clusters/greedy_tkmeans_100_50_1480',gifts)
 cl.compute_wgt_per_cluster()
 cl.lower_bound_per_cluster()
 #this is the best we can hope with these clusters :
@@ -263,6 +264,7 @@ X = gifts[['Latitude','Longitude']].values
 cb = bc.Cluster_Builder(X,[],None,gifts.Weight.values)
 cb.greedy_for_bound(1000,direction='west')
 
-
-cl = bc.Cluster(cb.clusters,gifts)
-cl.save('greedy_South_100')
+import vrp
+reload(vrp)
+cl = vrp.Solution(cb.clusters,gifts)
+cl.save_cluster('greedy_West_1000_998kg')
