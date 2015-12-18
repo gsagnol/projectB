@@ -39,13 +39,15 @@ p = FLAGS.processes
 
 for i in range(p):
     a,b =  i*(n//p+1),min((i+1)*(n//p+1),n)
+    if a>=b:
+        break
     print '**** opt on {0}--{1} ****'.format(a,b)
     command = 'python optimize_tours.py'
     if FLAGS.slurm:
         command = 'srun -p opt -A traffic ' + command
     command += ' --filename '+FLAGS.filename
     command += ' --solution_file '+ FLAGS.solution_file+'_tours_{0}_{1}.csv'.format(a,b)
-    command += ' --tours '+str(a)+','+str(b)
+    command += ' --tours '+str(a)+','+str(b-1)
     command += ' --range'
     command += ' --verbose '+ str(FLAGS.verbose)
     command += ' --restart '+ str(FLAGS.restart)

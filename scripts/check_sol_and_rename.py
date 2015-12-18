@@ -1,0 +1,64 @@
+#usage: python check_sol.py <solution_file>.csv
+
+north_pole = (90,0)
+weight_limit = 1000
+sleigh_weight = 10
+
+
+import pandas as pd
+import numpy as np
+from haversine import haversine
+import sys
+import os
+
+def weighted_trip_length(stops, weights):
+    tuples = [tuple(x) for x in stops.values]
+    # adding the last trip back to north pole, with just the sleigh weight
+    tuples.append(north_pole)
+    weights.append(sleigh_weight)
+
+    dist = 0.0
+    prev_stop = north_pole
+    prev_weight = sum(weights)
+    for i in range(len(tuples)):
+        dist = dist + haversine(tuples[i], prev_stop) * prev_weight
+        prev_stop = tuples[i]
+        prev_weight = prev_weight - weights[i]
+    return dist
+
+def weighted_reindeer_weariness(all_trips):
+    uniq_trips = all_trips.TripId.unique()
+
+    if any(all_trips.groupby('TripId').Weight.sum() > weight_limit):
+        raise Exception("One of the sleighs over weight limit!")
+
+    dist = 0
+    for t in uniq_trips:
+        this_trip = all_trips[all_trips.TripId==t]
+        dist = dist + weighted_trip_length(this_trip[['Latitude','Longitude']], this_trip.Weight.tolist())
+
+    return len(uniq_trips),dist
+
+
+
+gifts = pd.read_csv('../input/gifts.csv')
+
+solfile = '../solutions/'+sys.argv[1]
+solution = pd.read_csv(solfile)
+
+all_trips = solution.merge(gifts, on='GiftId')
+
+print str(len(all_trips))+' Items'
+trips,wrw = weighted_reindeer_weariness(all_trips)
+print str(trips)+' Trips'
+print 'obj:'+str(wrw)
+
+solname = solfile.split('.csv')[0]
+if '_merged' in solname:
+    newname = solname.replace('_merged','_'+str(wrw))
+else:
+    newname = solname + '_'+str(wrw)
+newname = newname+'.csv'
+
+os.system('mv '+solfile+' '+newname)
+print 'mv '+solfile+' '+newname

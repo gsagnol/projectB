@@ -61,11 +61,11 @@ class MLT:
 
         for i,j in enumerate(order):
             latency += self.distances[current_node,j]
-            weighted_latency += latency * mlt.weights[j]
+            weighted_latency += latency * self.weights[j]
             current_node = j
 
         latency += self.distances[current_node,0]
-        weighted_latency += latency * mlt.weights[0]
+        weighted_latency += latency * self.weights[0]
 
         return weighted_latency,latency
 
@@ -153,14 +153,11 @@ class MLT:
                     best = tour
         return best
 
-
-
-
 class Tour:
     """
     A tour for the MLT problem, startind and ending at north pole
     """
-    def __init__(self,mlt,ordered_gifts,latency = None,wlatency = None):
+    def __init__(self,mlt,ordered_gifts,latency = None, wlatency = None):
         """
         The constructor takes a MLT problem and a list of ordered gift IDs.
         """
@@ -332,7 +329,7 @@ class Subsequence:
         u = self.order[-1]
         v = next_sub.order[0]
         init_distance = self.latency + self.mlt.distances[u,v]
-        end_weight = sum([self.mlt.weights[i] for i in next_sub.order])
+        end_weight = next_sub.wgt
         lat = init_distance + next_sub.latency
         wlat = self.wlatency + next_sub.wlatency + init_distance * end_weight
         wg = self.wgt + next_sub.wgt

@@ -21,3 +21,13 @@ for filename in to_merge:
     output.writelines(lines[1:])
 
 output.close()
+
+
+nn = int(os.popen('wc -l ../solutions/'+out).read().split()[0])
+
+if nn==100001:
+    print 'merge worked'
+    for fn in [first]+to_merge:
+        os.system('rm '+fn)
+else:
+    print 'Error: The merge file didnt have 100000 gifts'
