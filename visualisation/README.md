@@ -24,5 +24,7 @@ Définir une zone avc 2 click pour afficher tous les trips avec au moins un cade
 
 
 ## Extra
-Voir toutes les solutions disponibles
+- Voir toutes les solutions disponibles:
 http://localhost:8081/solutions
+- Voir un ensemble de trips par leur id:
+http://localhost:8081/?solution=best_sol_897_12675059481.6.csv&trips=[1,2,3,4,5,6]
