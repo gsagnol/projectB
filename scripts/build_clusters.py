@@ -181,7 +181,19 @@ class Cluster_Builder:
         
         self.latencies_in_cluster[k].insert(j,latency_i)
         
-        self.centroids[k] = (self.centroids[k] * self.weight_per_cluster[k] + self.X[i] * self.weights[i])/(self.weights[i]+self.weight_per_cluster[k])
+        if min(self.centroids[k][1],self.X[i][1])<-150 and max(self.centroids[k][1],self.X[i][1])>150:
+            lamean = (self.centroids[k][0] * self.weight_per_cluster[k] + self.X[i][0] *
+                                 self.weights[i])/(self.weights[i]+self.weight_per_cluster[k])
+            lo = np.array([self.centroids[k][1],self.X[i][1]])
+            lo = np.where(lo<0,lo+360,lo)
+            lomean = (lo[0] * self.weight_per_cluster[k] + lo[1]*self.weights[i])/(self.weights[i]+self.weight_per_cluster[k])
+            if lomean>180:
+                lomean = lomean-360.
+            self.centroids[k] = np.array([lamean,lomean])
+            #import pdb;pdb.set_trace()
+        else:
+            self.centroids[k] = (self.centroids[k] * self.weight_per_cluster[k] + self.X[i] *
+                                 self.weights[i])/(self.weights[i]+self.weight_per_cluster[k])
         self.weight_per_cluster[k]+= self.weights[i]
         
         self.cost_per_cluster[k] +=  self.weights[i]*latency_i+ (weight_after_j + sleigh_weight) * delta_latency + sleigh_weight * delta_d
@@ -203,7 +215,7 @@ class Cluster_Builder:
         self.weight_per_cluster[kk] = self.weights[i]
         self.cost_per_cluster[kk] = (self.weights[i]+2*sleigh_weight) * self.distances_to_pole[i]
 
-    def greedy_for_bound(self,best_in_next = 100, direction = 'west', disp_progress=True,width=40,wgpenalty=0):
+    def greedy_for_bound(self,best_in_next = 100, direction = 'west', disp_progress=True,width=40,wgpenalty=0,start=-180):
         print 'initialization...'
         self.to_assign = np.random.permutation(range(self.N)).tolist()
         '''
@@ -217,11 +229,12 @@ class Cluster_Builder:
         self.centroids = np.zeros((0,2))
         self.K = 0
         
+        shiftedlong = np.where(self.X[self.to_assign][:,1]<start,self.X[self.to_assign][:,1]+360,self.X[self.to_assign][:,1])
         if direction=='west':
             print 'sorting gifts per longitude...'
-            self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,1])]
+            self.to_assign = np.array(self.to_assign)[np.argsort(shiftedlong)]
         elif direction=='east':
-            self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,1])[::-1]]
+            self.to_assign = np.array(self.to_assign)[np.argsort(shiftedlong)[::-1]]
         elif direction=='south':
             self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,0])[::-1]]
         elif direction=='north':
@@ -277,7 +290,7 @@ class Cluster_Builder:
                     #if self.K>1500:
                     #    import pdb;pdb.set_trace()#TMP
                     break
-                if self.weight_per_cluster[c]+self.weights[i]<weight_limit:
+                if self.weight_per_cluster[c]+self.weights[i]<weight_limit-wgpenalty:
                     self.add_in_tour(i,c)
                     assigned = True
                     self.to_assign.remove(i)
