@@ -262,9 +262,14 @@ for i,k in enumerate(model.labels_):
 
 X = gifts[['Latitude','Longitude']].values
 cb = bc.Cluster_Builder(X,[],None,gifts.Weight.values)
-cb.greedy_for_bound(1000,direction='west')
+cb.greedy_for_bound(2000,direction='east',width=10,wgpenalty=15)
+
+
+f = open('../clusters/greedy_West_2000_997kg','w')
+f.write(str({c:[i+1 for i in v] for c,v in cb.clusters.iteritems()}))
+f.close()
 
 import vrp
 reload(vrp)
 cl = vrp.Solution(cb.clusters,gifts)
-cl.save_cluster('greedy_West_1000_998kg')
+cl.save_cluster('greedy_East_2000_993kg')
