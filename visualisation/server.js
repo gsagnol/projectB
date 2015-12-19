@@ -12,16 +12,24 @@ app.get('/solutions', function (req, response) {
 
 app.get('/solutions/:solution/trips', function (req, response) {
     if (req.query !== {}) {
-        var area = {
-            maxLon: req.query["maxLon"],
-            maxLat: req.query["maxLat"],
-            minLon: req.query["minLon"],
-            minLat: req.query["minLat"]
-        };
-        solutions.getTripsInArea(req.params.solution,area, function (trips) {
-            response.send(trips);
-        });
-    }else {
+        if(req.query["maxLon"] === undefined) {
+            if(req.query["quality"] == 'low'){
+                solutions.getWorseTrips(req.params.solution, function(trips) {
+                    response.send(trips);
+                });
+            }
+        }else{
+            var area = {
+                maxLon: req.query["maxLon"],
+                maxLat: req.query["maxLat"],
+                minLon: req.query["minLon"],
+                minLat: req.query["minLat"]
+            };
+            solutions.getTripsInArea(req.params.solution, area, function (trips) {
+                response.send(trips);
+            });
+        }
+    }else{
         solutions.getTrips(req.params.solution, function (trips) {
             response.send(trips);
         });
