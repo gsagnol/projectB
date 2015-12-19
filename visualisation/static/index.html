@@ -23,6 +23,7 @@
     var map;
     var first = true;
     var solution = getUrlParameter("solution");
+    var tripsFromUser = getUrlParameter("trips");
     var tripsLocation = {};
     var flightPaths = [];
     var markers = [];
@@ -47,7 +48,11 @@
             center: {lat: 0, lng: 0},
             mapTypeId: google.maps.MapTypeId.TERRAIN
         });
-
+        if(tripsFromUser){
+            userInputTripDisplay(solution, tripsFromUser);
+        }else{
+            initialTripDisplay(solution);
+        }
         google.maps.event.addListener(map, "click", function(event) {
             var lat = event.latLng.lat();
             var lng = event.latLng.lng();
@@ -92,6 +97,25 @@
         });
     }
 
+    function initialTripDisplay(solution){
+        clearMapFromPaths();
+        $.getJSON( "/solutions/" + solution + "/trips/", {
+            quality: "low"
+        }, function(data) {
+            data.forEach(function(tripId){
+                displayTrip(solution, tripId)
+            });
+        });
+    }
+
+    function userInputTripDisplay(solution, trips){
+        clearMapFromPaths();
+        var data = JSON.parse(trips);
+        data.forEach(function(tripId){
+            displayTrip(solution, tripId)
+        });
+    }
+
     function displayTrip(solution, tripId){
         $.getJSON( "/solutions/" + solution + "/trips/" + tripId, function(data) {
             var flightPlanCoordinates = data.map(function(obj){
@@ -126,6 +150,7 @@
                 return sParameterName[1] === undefined ? true : sParameterName[1];
             }
         }
+        return false;
     }
 
 
