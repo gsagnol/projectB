@@ -40,10 +40,61 @@ class Cluster_Builder:
             self.latencies_in_cluster = {k:[] for k in range(self.K)} #for gifts ordered by lattitude for the greedy bound optimization
             self.cost_per_cluster = {k:0. for k in range(self.K)} #for gifts ordered by lattitude for the greedy bound optimization
         else:
-            self.clusters = {c:[i-1 for i in clusters[c]] for c in clusters}
+            #self.clusters = {c:[i-1 for i in clusters[c]] for c in clusters}
+            if min(clusters)==1:
+                self.clusters = {c-1:v for c,v in clusters.iteritems()}
+            else:
+                self.clusters = clusters
             self.K = len(clusters)
-            self.to_assign = []
-            self.update_stats()
+            #self.to_assign = []
+            #self.update_stats()
+            self.update_instance()
+            
+    def update_instance(self):
+        all_gifts = set(range(self.N))
+        centroids = []
+        self.distances_to_pole = cdist(np.atleast_2d(north_pole),self.X,haversine).ravel()
+        for c in sorted(self.clusters):
+            all_gifts = all_gifts - set(self.clusters[c])
+            lamean = sum(self.X[self.clusters[c]][:,0] * self.weights[self.clusters[c]])/sum(self.weights[self.clusters[c]])
+            longs = self.X[self.clusters[c]][:,1]
+            if min(longs)<-150 and max(longs)>150:
+                import pdb;pdb.set_trace()
+            else:
+                lomean = sum(self.X[self.clusters[c]][:,1] * self.weights[self.clusters[c]])/sum(self.weights[self.clusters[c]])
+            centroids.append(np.array([lamean,lomean]))
+            
+        self.to_assign = list(all_gifts)
+        order_cluster = np.argsort(np.array(centroids)[:,1])
+        self.centroids = np.array(centroids)[order_cluster]
+    
+        newcls = {}
+        for i,k in enumerate(order_cluster):
+            newcls[i] = self.clusters[k][:]
+        
+        self.clusters = newcls
+        
+        self.weight_per_cluster = {}
+        self.latencies_in_cluster = {}
+        self.cost_per_cluster = {}
+        self.latitudes_in_cluster = {}
+        for c in sorted(self.clusters):    
+            self.weight_per_cluster[c] = sum(self.weights[self.clusters[c]])
+            lats = self.X[self.clusters[c]][:,0]
+            assert( all([lats[i]>lats[i+1] for i in range(len(lats)-1)]) ) 
+            self.latitudes_in_cluster[c] = list(lats)
+            lat = 0.
+            latencies = []
+            current = north_pole
+            for x in self.X[self.clusters[c]]:
+                lat += haversine(current,x)
+                latencies.append(lat)
+                current = np.array(x)
+            
+            self.latencies_in_cluster[c] = latencies
+            
+            self.cost_per_cluster[c] = sum(np.array(latencies)*self.weights[self.clusters[c]]) + (
+                                        sleigh_weight * (latencies[-1] + self.distances_to_pole[self.clusters[c][-1]]))
 
     def compute_initial_allocation(self,disp_progress = True):
 
@@ -215,29 +266,32 @@ class Cluster_Builder:
         self.weight_per_cluster[kk] = self.weights[i]
         self.cost_per_cluster[kk] = (self.weights[i]+2*sleigh_weight) * self.distances_to_pole[i]
 
-    def greedy_for_bound(self,best_in_next = 100, direction = 'west', disp_progress=True,width=40,wgpenalty=0,start=-180):
-        print 'initialization...'
-        self.to_assign = np.random.permutation(range(self.N)).tolist()
-        '''
-        if not(np.all([self.centroids[i][1]<=self.centroids[i+1][1] for i in range(len(self.centroids)-1)])):
-            print 'warning: centroids were not sorted by longitude. I reorder them'
-            self.centroids = np.array(sorted(self.centroids, key=lambda x: x[1]))
-            
-        self.init_clusters_with_centroids()
-        #TODO try from east to west and from west to east
-        '''
-        self.centroids = np.zeros((0,2))
-        self.K = 0
+    def greedy_for_bound(self,best_in_next = 100, direction = 'west', disp_progress=True,width=40,wgpenalty=0,start=-180,init=True):
+        if init:
+            print 'initialization...'
+            self.to_assign = np.random.permutation(range(self.N)).tolist()
+            '''
+            if not(np.all([self.centroids[i][1]<=self.centroids[i+1][1] for i in range(len(self.centroids)-1)])):
+                print 'warning: centroids were not sorted by longitude. I reorder them'
+                self.centroids = np.array(sorted(self.centroids, key=lambda x: x[1]))
+                
+            self.init_clusters_with_centroids()
+            '''
+            self.centroids = np.zeros((0,2))
+            self.K = 0
         
         shiftedlong = np.where(self.X[self.to_assign][:,1]<start,self.X[self.to_assign][:,1]+360,self.X[self.to_assign][:,1])
         if direction=='west':
             print 'sorting gifts per longitude...'
             self.to_assign = np.array(self.to_assign)[np.argsort(shiftedlong)]
         elif direction=='east':
+            print 'sorting gifts per longitude...'
             self.to_assign = np.array(self.to_assign)[np.argsort(shiftedlong)[::-1]]
         elif direction=='south':
+            print 'sorting gifts per latitude...'
             self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,0])[::-1]]
         elif direction=='north':
+            print 'sorting gifts per latitude...'
             self.to_assign = np.array(self.to_assign)[np.argsort(self.X[self.to_assign][:,0])]
         else:
             raise ValueError('direction not implemented')
