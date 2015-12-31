@@ -376,15 +376,12 @@ class KTour:
             wsplit = (None,)*self.K
 
         self.ts = ts
-        self.orders = orders
-        self.wsplit = wsplit
 
         self.N = len(ts.ww)
         if self.ts.distances is None:
             self.ts.precompute_distances()
 
-        self.tours = tuple([Tour(self,o,lat,wl,wgt) for o,wl,lat,wgt in zip(orders,wlatencies,latencies,wsplit)])
-        self.wsplit = tuple([t.weight for t in self.tours])
+        self.tours = [Tour(self,o,lat,wl,wgt) for o,wl,lat,wgt in zip(orders,wlatencies,latencies,wsplit)]
 
         self.Z = sum([t.wlatency for t in self.tours])
         self.L = sum([t.latency for t in self.tours])
@@ -397,6 +394,13 @@ class KTour:
                 self.gift_to_tour[i] = k
 
         self.max_excess = max_excess
+        self.all_granular_neighborhoods()
+        self.preprocess_all_tours()
+
+        self.mu_excess = 10.
+        self.excess = sum([max(0.,t.weight-weight_limit) for t in self.tours])
+        self.cost = self.Z + self.mu_excess * self.excess
+
 
     def preprocess_all_tours(self):
         for t in self.tours:
@@ -406,7 +410,65 @@ class KTour:
         for t in self.tours:
             t.compute_granular_neighborhoods()
 
-    def relocate(self,k1,i,m,k2,j):
+    def RVND(self,disp=0,start_it = 0):
+        NLinit = ['relocate','exchange']
+        NL = NLinit[:]
+        it = start_it
+        if disp>=2:
+            print it,self.cost
+
+        fbest = self.cost
+
+        excess_it = 0
+        no_excess_it = 0
+
+        while NL:
+            it+=1
+            neighborhood = NL[np.random.randint(len(NL))]
+
+            tab = []
+            for args in self.explore_neighborhood(neighborhood):
+                sw1,sw2 = self.eval_move(neighborhood,args)
+                t1,t2 = args[0], args[1]
+                diff_excess = ( -(max(0.,self.tours[t1].weight-weight_limit) + max(0.,self.tours[t2].weight-weight_limit))
+                                + max(0.,sw1.weight-weight_limit) + max(0.,sw2.weight-weight_limit) )
+                tab.append((sw1.wlatency+sw2.wlatency+self.mu_excess*diff_excess,args))
+                            ##sum([max(0.,t.weight-1000.) for t in self.tours])))
+
+            #if self.mu_excess>1000:
+            #    import pdb;pdb.set_trace()
+            next_move = sorted(tab)[0]
+            #TODO random select, TABU, neg move, store best sol
+
+            if next_move[0] > fbest-1e-3:
+                NL.remove(neighborhood)
+            else:
+                self.move(neighborhood,next_move[1])
+                fbest = self.cost
+                NL = NLinit[:]
+                if self.excess > 0:
+                    excess_it += 1
+                    no_excess_it = 0
+                    if excess_it == 6:
+                        self.mu_excess *= 10
+                        excess_it = 0
+                else:
+                    no_excess_it += 1
+                    excess_it = 0
+                    if no_excess_it == 6:
+                        self.mu_excess /= 5
+                        no_excess_it = 0
+
+            if disp>=2:
+                print it,self.cost,self.excess
+
+        if self.excess > 1e-3:
+            self.mu_excess *= 10
+            self.cost = self.Z + self.mu_excess * self.excess
+            print 'augmenting weight penalty: mu={0}'.format(self.mu_excess)
+            self.RVND(disp,start_it=it)
+
+    def relocate(self,k1,k2,i,m,j):
         """
         relocates subseq i...i+m-1 of tour k1 at pos j of tour k2
         """
@@ -444,7 +506,7 @@ class KTour:
 
         return (seq1.to_tour(),seq2.to_tour())
 
-    def exchange(self,k1,i,m,p,k2,j,t):
+    def exchange(self,k1,k2,i,m,p,j,t):
         """
         subseq i...i+m-1 of tr k1 goes before (former) position p of tour k2
               and j goes before (former) position t of tour k1
@@ -468,11 +530,9 @@ class KTour:
         assert(p <= n2)
         assert(t >= 0)
         assert(t <= n1)
-        assert(p!=j)
-        assert(t<i or t>=i+m)
 
         seq1 = self.tours[k2].subseq[j,j+1]
-        seq2 =  self.tours[k1].subseq[i,i+m]
+        seq2 = self.tours[k1].subseq[i,i+m]
 
         if t< i:
             if t>0:
@@ -480,13 +540,17 @@ class KTour:
             seq1 = seq1 + self.tours[k1].subseq[t,i]
             if i+m < n1:
                 seq1 = seq1 + self.tours[k1].subseq[i+m,n1]
-        else:
-            if t>i+m:
-                seq1 = self.tours[k1].subseq[i+m,t] + seq1
+        elif t>i+m:
+            seq1 = self.tours[k1].subseq[i+m,t] + seq1
             if i>0:
                 seq1 = self.tours[k1].subseq[0,i] + seq1
             if t<n1:
                 seq1 = seq1 + self.tours[k1].subseq[t,n1]
+        else:
+            if i>0:
+                seq1 = self.tours[k1].subseq[0,i] + seq1
+            if i+m < n1:
+                seq1 = seq1 + self.tours[k1].subseq[i+m,n1]
 
         if p< j:
             if p>0:
@@ -494,30 +558,125 @@ class KTour:
             seq2 = seq2 + self.tours[k2].subseq[p,j]
             if j+1 < n2:
                 seq2 = seq2 + self.tours[k2].subseq[j+1,n2]
-        else:
-            if p>j+1:
-                seq2 = self.tours[k2].subseq[j+1,p] + seq2
+        elif p>j+1:
+            seq2 = self.tours[k2].subseq[j+1,p] + seq2
             if j>0:
                 seq2 = self.tours[k2].subseq[0,j] + seq2
             if p<n2:
                 seq2 = seq2 + self.tours[k2].subseq[p,n2]
+        else:
+            if j>0:
+                seq2 = self.tours[k2].subseq[0,j] + seq2
+            if j+1<n2:
+                seq2 = seq2 + self.tours[k2].subseq[j+1,n2]
 
         return (seq1.to_tour(),seq2.to_tour())
 
-    def explore_neighboorhood(self,neighborhood):
+    def eval_move(self,neighborhood,args):
+        if neighborhood == 'relocate':
+            sw1,sw2 = self.relocate(*args)
+        elif neighborhood == 'exchange':
+            sw1,sw2 = self.exchange(*args)
+        elif neighborhood == 'twoopt':
+            sw1,sw2 = self.twoopt(*args)
+        return sw1,sw2
+
+    def move(self,neighborhood,args):
+        t1 = args[0]
+        t2 = args[1]
+        sw1,sw2 = self.eval_move(neighborhood,args)
+
+        ol = self.tours[t1].latency + self.tours[t2].latency
+        wol = self.tours[t1].wlatency + self.tours[t2].wlatency
+
+        sw1.preprocess_subsequences()
+        sw1.compute_granular_neighborhoods()
+        sw2.preprocess_subsequences()
+        sw2.compute_granular_neighborhoods()
+
+        diff_excess = ( -(max(0.,self.tours[t1].weight-weight_limit) + max(0.,self.tours[t2].weight-weight_limit))
+                                + max(0.,sw1.weight-weight_limit) + max(0.,sw2.weight-weight_limit) )
+        self.tours[t1] = sw1
+        self.tours[t2] = sw2
+        self.L = self.L - ol + sw1.latency + sw2.latency
+        self.Z = self.Z - wol + sw1.wlatency + sw2.wlatency
+        self.excess += diff_excess
+        self.cost = self.Z + self.mu_excess * self.excess
+
+        for i in sw1.order:
+            self.gift_to_tour[i] = t1
+        for i in sw2.order:
+            self.gift_to_tour[i] = t2
+
+    def explore_neighborhood(self,neighborhood,maxm=3):
         if neighborhood == 'relocate':
             for k in range(self.K):
                 remk = weight_limit - self.tours[k].weight
                 maxw = self.max_excess + remk
+                if maxw < 0:
+                    continue
                 for indi,i in enumerate(self.tours[k].order):
                     for j in self.tours[k].grangb[indi]:
                         tourj = self.gift_to_tour[j]
                         indj = self.tours[tourj].order.index(j)
                         m = 1
                         while self.tours[tourj].subseq[indj,indj+m].wgt < maxw:
-                            yield self.relocate(tourj,indj,m,k,indi)
+                            yield (tourj,k,indj,m,indi+1)
                             m+=1
-                        #TODO and reverse tour ??? will this not be counted twice ?
+                            if m > maxm or indj+m > self.tours[tourj].n:
+                                break
+                            if indj+m == self.tours[tourj].n:
+                                break
+
+                        m = 1
+                        while self.tours[tourj].subseq[indj-m+1,indj+1].wgt < maxw:
+                            ngbm1 = self.tours[tourj].grangb[indj-m+1]
+                            if all([self.gift_to_tour[ng]!=k for ng in ngbm1]):
+                                yield (tourj,k,indj-m+1,m,indi)
+                            m+=1
+                            if m > maxm or indj+m > self.tours[tourj].n:
+                                break
+                            if indj-m+1 == -1:
+                                break
+
+        elif neighborhood == 'exchange':
+            for k in range(self.K):
+                remk = weight_limit - self.tours[k].weight
+                maxwk = self.max_excess + remk
+                for indi,i in enumerate(self.tours[k].order):
+                    capa_k = maxwk +  self.ts.ww[i]
+                    for j in self.tours[k].grangb[indi]:
+                        tourj = self.gift_to_tour[j]
+                        indj = self.tours[tourj].order.index(j)
+                        #remj = weight_limit - self.tours[tourj].weight
+                        #maxwj = self.max_excess + remj
+                        #if self.ts.ww[i] > maxwj:
+                        #    continue
+                        #ok, so elem indi of tour k will go before/after indj #TODO before/after dep. on latitude
+                        for kj in range(self.tours[tourj].n):
+                            for mj in range(1,min(maxm+1,self.tours[tourj].n+1-kj)):
+                                if self.tours[tourj].subseq[kj,kj+mj].wgt > capa_k:
+                                    break
+                                if self.tours[tourj].subseq[kj,kj+mj].wgt < self.ts.ww[i]:
+                                    continue
+
+                            if ((self.tours[tourj].subseq[kj,kj+mj].wgt > capa_k) or
+                                (self.tours[tourj].subseq[kj,kj+mj].wgt < self.ts.ww[i])):
+                                    break
+
+                            #ok, subchain kj,mj can go in tour k, but where ?
+                            srdis = sorted([(self.ts.distances[self.tours[tourj].order[kj],ki],ki)
+                                            for ki in self.tours[tourj].grangb[kj]
+                                            if self.gift_to_tour[ki]==k])
+                            if not(srdis):
+                                break
+                            p = srdis[0][1]
+                            ip = self.tours[k].order.index(p)
+
+                            yield (tourj,k,kj,mj,ip,indi,indj)
+
+            pass#TODO  2opt-
+
 
 class Tour:
     """
@@ -779,7 +938,7 @@ sol2.write('solE993+1opt.csv')
 ts = vrp.TripSplitter(sol,1402,1403)
 kt = vrp.KTour(ts, (range(len(ts.X1)),range(len(ts.X1),len(ts.XX))),
             (ts.wl1,ts.wl2), (ts.latcy1,ts.latcy2), ( sum(ts.wg1), sum(ts.wg2)))
-kt = vrp.KTour(ts, (range(len(ts.X1)),range(len(ts.X1),len(ts.XX))), (None,None),(None,None) ,(None,None))
+kt = vrp.KTour(ts, (range(len(ts.X1)),range(len(ts.X1),len(ts.XX))), None, None , None)
 
 ##############
 #test relocate
@@ -793,13 +952,23 @@ tt1,tt2 = kt.exchange(0,0,2,1,1)
 
 ##############
 #test exploration
-min([sw1.wlatency + sw2.wlatency for sw1,sw2 in kt.explore_neighboorhood('relocate')])
+
+tab = []
+for arg in kt.explore_neighborhood('relocate'):
+    sw1,sw2 = kt.relocate(*arg)
+    tab.append((sw1.wlatency+sw2.wlatency,arg))
+
+tab = []
+    for arg in kt.explore_neighborhood('exchange'):
+    sw1,sw2 = kt.exchange(*arg)
+    tab.append((sw1.wlatency+sw2.wlatency,arg))
+
+#TODO Tabu-list
+#TODO initial construction
+#TODO test with k>2 trips  --> TODO init kt with tour indices, no ts, instead we just need ww,distances and ZZ
+#TODO neg moves, random select etc.
 
 #OK, so now structure is in place and working with subsequences. TODO:
 inter-
-_swap
 _2opt
-_more ?
-+smart check on latitude to try only good candidates
-
 """
