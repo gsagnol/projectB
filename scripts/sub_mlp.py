@@ -32,7 +32,8 @@ class MLT:
         the number of gifts + the north pole
         """
         self.n = len(self.positions)
-        assert(sum(self.weights) < weight_limit + sleigh_weight)
+        self.sumwgt = sum(self.weights)
+        assert(self.sumwgt < weight_limit + sleigh_weight)
 
         d = np.zeros((self.n,self.n))
         for i,x in enumerate(self.positions):
@@ -350,7 +351,7 @@ class Subsequence:
         d1 = self.mlt.distances[0,self.order[0]]
         d2 = self.mlt.distances[0,self.order[-1]]
         lat = self.latency + d1 + d2
-        wlat = self.wlatency + d1 * sum(self.mlt.weights) + (self.latency + d2) * self.mlt.weights[0]
+        wlat = self.wlatency + d1 * sum(self.mlt.sumwgt) + (self.latency + d2) * self.mlt.weights[0]
         return Tour(self.mlt,self.order,lat,wlat)
 
 """

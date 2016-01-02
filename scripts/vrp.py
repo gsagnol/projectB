@@ -9,6 +9,7 @@ import sub_mlp as smlp
 from mpl_toolkits.basemap import Basemap
 import pylab
 import sklearn.neighbors
+import scipy.stats
 
 class Solution:
     """
@@ -362,31 +363,46 @@ class KTour:
     """
     A ktuple of tours for the k-MLT problem, starting and ending at north pole
     """
-    def __init__(self,ts,orders, wlatencies = None,latencies=None, wsplit=None,max_excess = 0.):
+    def __init__(self,solution,tourIDs,orders=None,max_excess = 0.,mu_init = 500.):
         """
-        The constructor takes a MLT problem and a list of ordered gift IDs.
+        The constructor takes a Sol, a list of tours and a list of ordered gift IDs.
         """
-        assert(len(ts.ww)==sum([len(o) for o in orders]))
+        if orders is None:
+            ind = 0
+            orders = []
+            for i in tourIDs:
+                orders.append(range(ind,ind+len(solution.cluster[i])))
+                ind+=len(solution.cluster[i])
+
+        self.solution = solution
+        self.tourIDs = tourIDs
+        self.gifts = np.array([])
+        self.ww = np.array([])
+        self.XX = np.array([[],[]]).T
+        for i in tourIDs:
+            self.gifts = np.r_[self.gifts,solution.cluster[i]]
+            self.ww = np.r_[self.ww,solution.gifts.Weight[solution.cluster[i]].values]
+            self.XX = np.r_[self.XX,solution.X[solution.cluster[i]]]
+
+        self.ZZ = np.apply_along_axis(self.to_cartesian,1,self.XX)
+
+        assert(len(self.ww)==sum([len(o) for o in orders]))
         self.K = len(orders)
-        if wlatencies is None:
-            wlatencies = (None,)*self.K
-        if latencies is None:
-            latencies = (None,)*self.K
-        if wsplit is None:
-            wsplit = (None,)*self.K
 
-        self.ts = ts
+        #wlatencies = tuple([solution.wlatencies[i] for i in tourIDs])
+        #latencies = tuple([solution.latencies[i] for i in tourIDs])
+        #wsplit = tuple([solution.wgt_per_cluster[i] for i in tourIDs])
 
-        self.N = len(ts.ww)
-        if self.ts.distances is None:
-            self.ts.precompute_distances()
+        self.N = len(self.ww)
+        self.precompute_distances()
 
-        self.tours = [Tour(self,o,lat,wl,wgt) for o,wl,lat,wgt in zip(orders,wlatencies,latencies,wsplit)]
+        #self.tours = [Tour(self,o,lat,wl,wgt) for o,wl,lat,wgt in zip(orders,wlatencies,latencies,wsplit)]
+        self.tours = [Tour(self,o,None,None,None) for o in orders]
 
         self.Z = sum([t.wlatency for t in self.tours])
         self.L = sum([t.latency for t in self.tours])
         self.beta_dis = 1.
-        self.kdtree = sklearn.neighbors.kd_tree.KDTree(self.ts.ZZ)
+        self.kdtree = sklearn.neighbors.kd_tree.KDTree(self.ZZ)
 
         self.gift_to_tour = {}
         for k in range(self.K):
@@ -397,10 +413,35 @@ class KTour:
         self.all_granular_neighborhoods()
         self.preprocess_all_tours()
 
-        self.mu_excess = 10.
+        self.mu_excess = mu_init
         self.excess = sum([max(0.,t.weight-weight_limit) for t in self.tours])
         self.cost = self.Z + self.mu_excess * self.excess
 
+    def to_cartesian(self,x):
+        phi = (90-x[0]) * np.pi/180.
+        theta = x[1] * np.pi/180.
+        sphi = np.sin(phi)
+        return np.array([sphi*np.cos(theta),sphi*np.sin(theta),np.cos(phi)])
+
+    def precompute_distances(self):
+        n = len(self.XX)
+        d = {}
+        for i,x in enumerate(self.XX):
+            for j,y in enumerate(self.XX):
+                if i < j:
+                    continue
+                elif i == j:
+                    d[i,j] = 0.
+                else:
+                    d[i,j] = haversine(x,y)
+                    d[j,i] = d[i,j]
+        #north-pole is (-1)
+        for i,x in enumerate(self.XX):
+            d[-1,i] = haversine(x,north_pole)
+            d[i,-1] = d[-1,i]
+        d[-1,-1] = 0.
+
+        self.distances = d
 
     def preprocess_all_tours(self):
         for t in self.tours:
@@ -410,7 +451,11 @@ class KTour:
         for t in self.tours:
             t.compute_granular_neighborhoods()
 
-    def RVND(self,disp=0,start_it = 0):
+    def update_sol(self):
+        for tr,t in zip(self.tourIDs,self.tours):
+            self.solution.cluster[tr] = list(np.int32(self.gifts[t.order]))
+
+    def RVND(self,inbest = 5, disp=0,start_it = 0):
         NLinit = ['relocate','exchange']
         NL = NLinit[:]
         it = start_it
@@ -430,34 +475,47 @@ class KTour:
             for args in self.explore_neighborhood(neighborhood):
                 sw1,sw2 = self.eval_move(neighborhood,args)
                 t1,t2 = args[0], args[1]
-                diff_excess = ( -(max(0.,self.tours[t1].weight-weight_limit) + max(0.,self.tours[t2].weight-weight_limit))
-                                + max(0.,sw1.weight-weight_limit) + max(0.,sw2.weight-weight_limit) )
-                tab.append((sw1.wlatency+sw2.wlatency+self.mu_excess*diff_excess,args))
+                diff_excess = (-(max(0.,self.tours[t1].weight-weight_limit) + max(0.,self.tours[t2].weight-weight_limit))
+                                + max(0.,sw1.weight-weight_limit) + max(0.,sw2.weight-weight_limit))
+                diff_latency = sw1.wlatency + sw2.wlatency - self.tours[t1].wlatency - self.tours[t2].wlatency
+                tab.append((diff_latency + self.mu_excess*diff_excess,args))
                             ##sum([max(0.,t.weight-1000.) for t in self.tours])))
 
-            #if self.mu_excess>1000:
-            #    import pdb;pdb.set_trace()
-            next_move = sorted(tab)[0]
-            #TODO random select, TABU, neg move, store best sol
+            r = np.random.randint(18)
+            stab = sorted(tab)
 
-            if next_move[0] > fbest-1e-3:
-                NL.remove(neighborhood)
+            if r == 0 and len(stab) >= 5 and inbest >= 5 and stab[4][0] < 1e-3:
+                next_move = stab[4]
+            elif r<=2 and len(stab) >= 4 and inbest >= 4 and stab[3][0] < 1e-3:
+                next_move = stab[3]
+            elif r<=5 and len(stab) >= 3 and inbest >= 3 and stab[2][0] < 1e-3:
+                next_move = stab[2]
+            elif r<=10 and len(stab) >= 2 and inbest >= 2 and stab[1][0] < 1e-3:
+                next_move = stab[1]
+            elif r<=17 and len(stab) >= 1 and inbest >= 1 and stab[0][0] < 1e-3:
+                next_move = stab[0]
             else:
-                self.move(neighborhood,next_move[1])
-                fbest = self.cost
-                NL = NLinit[:]
-                if self.excess > 0:
-                    excess_it += 1
-                    no_excess_it = 0
-                    if excess_it == 6:
-                        self.mu_excess *= 10
-                        excess_it = 0
-                else:
-                    no_excess_it += 1
+                NL.remove(neighborhood)
+                if disp>=2:
+                    print it,self.cost,self.excess
+                continue
+
+            self.move(neighborhood,next_move[1])
+            fbest = self.cost
+
+            NL = NLinit[:]
+            if self.excess > 0:
+                excess_it += 1
+                no_excess_it = 0
+                if excess_it == 6:
+                    self.mu_excess *= 10
                     excess_it = 0
-                    if no_excess_it == 6:
-                        self.mu_excess /= 5
-                        no_excess_it = 0
+            else:
+                no_excess_it += 1
+                excess_it = 0
+                if no_excess_it == 6:
+                    self.mu_excess /= 5
+                    no_excess_it = 0
 
             if disp>=2:
                 print it,self.cost,self.excess
@@ -586,6 +644,10 @@ class KTour:
         t2 = args[1]
         sw1,sw2 = self.eval_move(neighborhood,args)
 
+        #if sw1.wlatency != Tour(self,sw1.order).wlatency:
+        #    print sw1.wlatency,Tour(self,sw1.order).wlatency
+        #    import pdb;pdb.set_trace()
+
         ol = self.tours[t1].latency + self.tours[t2].latency
         wol = self.tours[t1].wlatency + self.tours[t2].wlatency
 
@@ -596,6 +658,7 @@ class KTour:
 
         diff_excess = ( -(max(0.,self.tours[t1].weight-weight_limit) + max(0.,self.tours[t2].weight-weight_limit))
                                 + max(0.,sw1.weight-weight_limit) + max(0.,sw2.weight-weight_limit) )
+
         self.tours[t1] = sw1
         self.tours[t2] = sw2
         self.L = self.L - ol + sw1.latency + sw2.latency
@@ -644,28 +707,28 @@ class KTour:
                 remk = weight_limit - self.tours[k].weight
                 maxwk = self.max_excess + remk
                 for indi,i in enumerate(self.tours[k].order):
-                    capa_k = maxwk +  self.ts.ww[i]
+                    capa_k = maxwk +  self.ww[i]
                     for j in self.tours[k].grangb[indi]:
                         tourj = self.gift_to_tour[j]
                         indj = self.tours[tourj].order.index(j)
                         #remj = weight_limit - self.tours[tourj].weight
                         #maxwj = self.max_excess + remj
-                        #if self.ts.ww[i] > maxwj:
+                        #if self.ww[i] > maxwj:
                         #    continue
                         #ok, so elem indi of tour k will go before/after indj #TODO before/after dep. on latitude
                         for kj in range(self.tours[tourj].n):
                             for mj in range(1,min(maxm+1,self.tours[tourj].n+1-kj)):
                                 if self.tours[tourj].subseq[kj,kj+mj].wgt > capa_k:
                                     break
-                                if self.tours[tourj].subseq[kj,kj+mj].wgt < self.ts.ww[i]:
+                                if self.tours[tourj].subseq[kj,kj+mj].wgt < self.ww[i]:
                                     continue
 
                             if ((self.tours[tourj].subseq[kj,kj+mj].wgt > capa_k) or
-                                (self.tours[tourj].subseq[kj,kj+mj].wgt < self.ts.ww[i])):
+                                (self.tours[tourj].subseq[kj,kj+mj].wgt < self.ww[i])):
                                     break
 
                             #ok, subchain kj,mj can go in tour k, but where ?
-                            srdis = sorted([(self.ts.distances[self.tours[tourj].order[kj],ki],ki)
+                            srdis = sorted([(self.distances[self.tours[tourj].order[kj],ki],ki)
                                             for ki in self.tours[tourj].grangb[kj]
                                             if self.gift_to_tour[ki]==k])
                             if not(srdis):
@@ -706,12 +769,12 @@ class Tour:
         wgg = 0
 
         for j in self.order:
-            latency += self.kt.ts.distances[current_node,j]
-            weighted_latency += latency * self.kt.ts.ww[j]
-            wgg += self.kt.ts.ww[j]
+            latency += self.kt.distances[current_node,j]
+            weighted_latency += latency * self.kt.ww[j]
+            wgg += self.kt.ww[j]
             current_node = j
 
-        latency += self.kt.ts.distances[current_node,-1]
+        latency += self.kt.distances[current_node,-1]
         weighted_latency += latency * sleigh_weight
 
         self.wlatency = weighted_latency
@@ -737,10 +800,9 @@ class Tour:
         radius = self.kt.beta_dis * self.kt.L/float(self.kt.N+self.kt.K) #TODO adapt with remaining capacity ?
         ngb = []
         for i in self.order:
-            close_nodes = self.kt.kdtree.query_radius(self.kt.ts.ZZ[i],radius/AVG_EARTH_RADIUS)[0]
+            close_nodes = self.kt.kdtree.query_radius(self.kt.ZZ[i],radius/AVG_EARTH_RADIUS)[0]
             ngb.append([j for j in close_nodes if j not in self.order])
         self.grangb = ngb
-
 
     def swap(self,i,j):
         """
@@ -847,12 +909,12 @@ class Subsequence:
         latency = 0.
         weighted_latency = 0.
         current_node = self.order[0]
-        wgt = self.kt.ts.ww[current_node]
+        wgt = self.kt.ww[current_node]
 
         for j in self.order[1:]:
-            latency += self.kt.ts.distances[current_node,j]
-            weighted_latency += latency * self.kt.ts.ww[j]
-            wgt += self.kt.ts.ww[j]
+            latency += self.kt.distances[current_node,j]
+            weighted_latency += latency * self.kt.ww[j]
+            wgt += self.kt.ww[j]
             current_node = j
 
         self.wlatency = weighted_latency
@@ -865,7 +927,7 @@ class Subsequence:
         """
         u = self.order[-1]
         v = next_sub.order[0]
-        init_distance = self.latency + self.kt.ts.distances[u,v]
+        init_distance = self.latency + self.kt.distances[u,v]
         end_weight = next_sub.wgt
         lat = init_distance + next_sub.latency
         wlat = self.wlatency + next_sub.wlatency + init_distance * end_weight
@@ -884,10 +946,10 @@ class Subsequence:
         """
         add the north pole at the beginning and at the end of the subsequence
         """
-        d1 = self.kt.ts.distances[-1,self.order[0]]
-        d2 = self.kt.ts.distances[-1,self.order[-1]]
+        d1 = self.kt.distances[-1,self.order[0]]
+        d2 = self.kt.distances[-1,self.order[-1]]
         lat = self.latency + d1 + d2
-        wlat = self.wlatency + d1 * self.wgt + (self.latency + d2) * sleigh_weight
+        wlat = self.wlatency + d1 * self.wgt + lat * sleigh_weight#(self.latency + d2) * sleigh_weight
         return Tour(self.kt,self.order,lat,wlat,self.wgt)
 
 """
@@ -907,6 +969,7 @@ import Kmeans as km
 import build_clusters as bc
 import vrp
 import sub_mlp as smlp
+import scipy.stats
 
 
 gifts = pd.read_csv('../input/gifts.csv')
@@ -935,40 +998,21 @@ sol2.write('solE993+1opt.csv')
 # test neighboorhood search #
 #############################
 
-ts = vrp.TripSplitter(sol,1402,1403)
-kt = vrp.KTour(ts, (range(len(ts.X1)),range(len(ts.X1),len(ts.XX))),
-            (ts.wl1,ts.wl2), (ts.latcy1,ts.latcy2), ( sum(ts.wg1), sum(ts.wg2)))
-kt = vrp.KTour(ts, (range(len(ts.X1)),range(len(ts.X1),len(ts.XX))), None, None , None)
+#sections of longitude angle
+angle = 5
+section = {}
+in_section = {}
+for i in sol.cluster:
+    section[i] = int(scipy.stats.mode(((sol.X[sol.cluster[i]][:,1] +180)//angle))[0][0])
+    in_section.setdefault(section[i],[])
+    in_section[section[i]].append(i)
 
-##############
-#test relocate
-kt.tours[1].preprocess_subsequences()
-kt.tours[0].preprocess_subsequences()
-tt1,tt2 = kt.relocate(0,0,2,1,1)
 
-##############
-#test exchange
-tt1,tt2 = kt.exchange(0,0,2,1,1)
-
-##############
-#test exploration
-
-tab = []
-for arg in kt.explore_neighborhood('relocate'):
-    sw1,sw2 = kt.relocate(*arg)
-    tab.append((sw1.wlatency+sw2.wlatency,arg))
-
-tab = []
-    for arg in kt.explore_neighborhood('exchange'):
-    sw1,sw2 = kt.exchange(*arg)
-    tab.append((sw1.wlatency+sw2.wlatency,arg))
+kt = vrp.KTour(sol,in_section[68],max_excess=10)
 
 #TODO Tabu-list
 #TODO initial construction
-#TODO test with k>2 trips  --> TODO init kt with tour indices, no ts, instead we just need ww,distances and ZZ
-#TODO neg moves, random select etc.
-
-#OK, so now structure is in place and working with subsequences. TODO:
-inter-
-_2opt
+#TODO neg moves
+#TODO 2-opt
+#TODO method to save results -- OK, but need to update all dicts of sol (for subset of trips only)
 """
