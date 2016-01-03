@@ -21,7 +21,7 @@ class Solution:
 
     the data is stored as a dict tripID ->MLT
     """
-    def __init__(self,cluster_or_solution,gifts,compute_tours=False):
+    def __init__(self,cluster_or_solution,gifts):
         self.gifts = gifts
         self.X = gifts[['Latitude','Longitude']].values
         if isinstance(cluster_or_solution,str):
@@ -36,15 +36,7 @@ class Solution:
                 raise Exception('bad cluster indices')
         assert(min([min([vi for vi in v]) for v in cluster.values()]) == 0 )
         self.cluster = cluster
-        self.compute_wgt_per_cluster()
-        self.lower_bound_per_cluster(true_weight=False)
-        self.compute_latencies()
-        self.compute_cluster_sizes()
-        self.efficiencies = {k: self.wlatencies[k]/self.bound_per_cluster[k] for k in self.cluster}
-
-        if compute_tours:
-            self.mlts = {c: smlp.MLT(self.gifts,[i+1 for i in self.cluster.cluster[c]]) for c in self.cluster}
-            self.tours = {c: smlp.Tour(self.mlts[c],range(1,self.mlts[c].n)) for c in self.cluster}
+        self.update_cluster_dicts()
 
     def load(self,name):
         if name.startswith('../clusters'):
@@ -68,16 +60,29 @@ class Solution:
         f.write(str(clusters_from_1))
         f.close()
 
-    def write(self,name):
+    def write(self,name,only_clusts = None):
         if not name.startswith('../solutions'):
             name = '../solutions/' + name
         f = open(name,'w')
         f.write('GiftId,TripId\n')
-        for c,v in self.cluster.iteritems():
-            for i in v:
-                f.write('{0},{1}\n'.format(i+1,c))
+        if only_clusts is None:
+            for c,v in self.cluster.iteritems():
+                for i in v:
+                    f.write('{0},{1}\n'.format(i+1,c))
+        else:
+            for c in only_clusts:
+                v = self.cluster[c]
+                for i in v:
+                    f.write('{0},{1}\n'.format(i+1,c))
         
         f.close()
+
+    def update_cluster_dicts(self):
+        self.compute_wgt_per_cluster()
+        self.lower_bound_per_cluster(true_weight=False)
+        self.compute_latencies()
+        self.compute_cluster_sizes()
+        self.efficiencies = {k: self.wlatencies[k]/self.bound_per_cluster[k] for k in self.cluster}
 
     def compute_wgt_per_cluster(self):
         self.wgts = self.gifts.Weight.values
@@ -96,6 +101,7 @@ class Solution:
         self.cluster_widths = {}
         self.cluster_angles = {}
         self.cluster_heights = {}
+        self.lomeans = {}
         for c in self.cluster:
             longs = np.array([self.X[i][1] for i in self.cluster[c]])
             lats = np.array([self.X[i][0] for i in self.cluster[c]])
@@ -111,6 +117,7 @@ class Solution:
             self.cluster_widths[c] = 2*wd /len(lats)
             self.cluster_heights[c] = (max(lats)-min(lats))*np.pi/180 * AVG_EARTH_RADIUS
             self.cluster_angles[c] = ang
+            self.lomeans[c] = lomean
 
     def compute_latencies(self):
         self.latencies = {}
@@ -454,9 +461,73 @@ class KTour:
     def update_sol(self):
         for tr,t in zip(self.tourIDs,self.tours):
             self.solution.cluster[tr] = list(np.int32(self.gifts[t.order]))
+        self.solution.update_cluster_dicts()
+
+    def clark_wright(self):
+        savings = {}
+        for i in range(self.N):
+            for j in range(self.N):
+                if i==j:
+                    continue
+                new = ((sleigh_weight+self.ww[j]) * (self.distances[-1,i]+self.distances[i,j])
+                       + self.distances[-1,i]*self.ww[i] + self.distances[-1,j] * sleigh_weight )
+                old = self.distances[-1,i] * (self.ww[i] + 2*sleigh_weight) + self.distances[-1,j] * (self.ww[j] + 2*sleigh_weight)
+                savings[i,j] = old-new
+        sorted_savings = sorted([(sv,ij) for ij,sv in savings.iteritems()])
+        tours = []
+        ext = []
+        wgt = []
+        alloc = []
+        while True:
+            sv,(i,j) = sorted_savings.pop()
+            iin = i in alloc
+            jin = j in alloc
+            if iin and jin:
+                continue
+            if (not iin) and any([j == e[0] for e in ext]):
+                k = [id for id,e in enumerate(ext) if j==e[0]][0]
+                if self.ww[i] + wgt[k] < weight_limit:
+                    tours[k].insert(0,i)
+                    ext[k] = (i,ext[k][1])
+                    wgt[k] = self.ww[i] + wgt[k]
+                    alloc.append(i)
+
+            elif (not jin) and any([i == e[1] for e in ext]):
+                k = [id for id,e in enumerate(ext) if i==e[1]][0]
+                if self.ww[j] + wgt[k] < weight_limit:
+                    tours[k].append(j)
+                    ext[k] = (ext[k][0],j)
+                    wgt[k] = self.ww[j] + wgt[k]
+                    alloc.append(j)
+
+            elif (not iin) and (not jin) and len(tours)<self.K:
+                tours.append([i,j])
+                ext.append((i,j))
+                wgt.append(self.ww[i] + self.ww[j])
+                alloc.extend([i,j])
+
+            if len(alloc) == self.N:
+                break
+
+        self.tours = [Tour(self,o,None,None,None) for o in tours]
+
+        self.Z = sum([t.wlatency for t in self.tours])
+        self.L = sum([t.latency for t in self.tours])
+
+        self.gift_to_tour = {}
+        for k in range(self.K):
+            for i in tours[k]:
+                self.gift_to_tour[i] = k
+
+        self.all_granular_neighborhoods()
+        self.preprocess_all_tours()
+
+        self.excess = sum([max(0.,t.weight-weight_limit) for t in self.tours])
+        self.cost = self.Z + self.mu_excess * self.excess
+
 
     def RVND(self,inbest = 5, disp=0,start_it = 0):
-        NLinit = ['relocate','exchange']
+        NLinit = ['relocate','exchange','twoopt']
         NL = NLinit[:]
         it = start_it
         if disp>=2:
@@ -518,13 +589,13 @@ class KTour:
                     no_excess_it = 0
 
             if disp>=2:
-                print it,self.cost,self.excess
+                print it,self.cost,self.excess,neighborhood
 
         if self.excess > 1e-3:
             self.mu_excess *= 10
             self.cost = self.Z + self.mu_excess * self.excess
             print 'augmenting weight penalty: mu={0}'.format(self.mu_excess)
-            self.RVND(disp,start_it=it)
+            self.RVND(inbest=inbest,disp=disp,start_it=it)
 
     def relocate(self,k1,k2,i,m,j):
         """
@@ -563,6 +634,33 @@ class KTour:
             seq2 = seq2 + self.tours[k2].subseq[j,n2]
 
         return (seq1.to_tour(),seq2.to_tour())
+
+    def twoopt(self,k1,k2,i,j):
+        '''
+        i-1->i in tour k1 exchanged with j-1->j in tour k2, so
+        the new tours become
+        0...i-1 | j ... n2-1
+        0...j.1 | i ... n1-1
+        '''
+        assert(self.tours[k1].subseq is not None)
+        assert(self.tours[k2].subseq is not None)
+
+        n1 = self.tours[k1].n
+        n2 = self.tours[k2].n
+
+        assert(i>=1)
+        assert(j>=1)
+        assert(i < n1)
+        assert(j < n2)
+
+        seq1 = self.tours[k1].subseq[0,i]
+        seq2 = self.tours[k2].subseq[0,j]
+
+        seq1 = seq1 + self.tours[k2].subseq[j,n2]
+        seq2 = seq2 + self.tours[k1].subseq[i,n1]
+
+        return (seq1.to_tour(),seq2.to_tour())
+
 
     def exchange(self,k1,k2,i,m,p,j,t):
         """
@@ -738,8 +836,24 @@ class KTour:
 
                             yield (tourj,k,kj,mj,ip,indi,indj)
 
-            pass#TODO  2opt-
-
+        elif neighborhood == 'twoopt':
+            for k in range(self.K):
+                nk = self.tours[k].n
+                for indi,i in enumerate(self.tours[k].order[:-1]):
+                    indip1 = indi + 1
+                    ip1 = self.tours[k].order[indip1]
+                    for jp1 in self.tours[k].grangb[indi]:
+                        tourj = self.gift_to_tour[jp1]
+                        nj = self.tours[tourj].n
+                        indjp1 = self.tours[tourj].order.index(jp1)
+                        if jp1==0:
+                            continue
+                        indj = indjp1 - 1
+                        if ip1 not in self.tours[tourj].grangb[indj]:
+                            continue
+                        if ((self.tours[k].subseq[0,indip1].wgt + self.tours[tourj].subseq[indjp1,nj].wgt < weight_limit + self.max_excess) and
+                            (self.tours[tourj].subseq[0,indjp1].wgt + self.tours[k].subseq[indip1,nk].wgt < weight_limit + self.max_excess)):
+                            yield (k,tourj,indip1,indjp1)
 
 class Tour:
     """
@@ -998,21 +1112,34 @@ sol2.write('solE993+1opt.csv')
 # test neighboorhood search #
 #############################
 
-#sections of longitude angle
-angle = 5
-section = {}
-in_section = {}
-for i in sol.cluster:
-    section[i] = int(scipy.stats.mode(((sol.X[sol.cluster[i]][:,1] +180)//angle))[0][0])
-    in_section.setdefault(section[i],[])
-    in_section[section[i]].append(i)
+#sections sorted per longitude
+offset = 127.
+sorlongs = [c for lo,c in sorted([(lo if lo>offset else lo+360.,c) for c,lo in sol.lomeans.iteritems()])]
+nsec = 5
+sections = []
+ind = 0
+k = 0
+while True:
+    if k < (nsec - (len(sorlongs) % nsec)) % nsec:
+        nn = nsec -1
+    else:
+        nn = nsec
+    sections.append(sorlongs[ind : ind + nn])
+    ind += nn
+    k += 1
+    if ind >= len(sorlongs):
+        break
 
 
-kt = vrp.KTour(sol,in_section[68],max_excess=10)
+sec = 17
+kt = vrp.KTour(sol,sections[sec],max_excess=50)
+kt.RVND(inbest=3,disp=2)
+sol.write('../partsol/tmpsol1_'+str(sec),only_clusts = kt.tourIDs)
+
 
 #TODO Tabu-list
-#TODO initial construction
+#TODO multiple restarts with other inbest? with clark_write for init ?
+#TODO update Neighborhood (involving long ?)
 #TODO neg moves
-#TODO 2-opt
-#TODO method to save results -- OK, but need to update all dicts of sol (for subset of trips only)
+#TODO in exchange bef/after dep on lat.
 """
