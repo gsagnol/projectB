@@ -135,12 +135,15 @@ class MLT:
                     this_init_best = tour
 
             tour = this_init_best
+            if i == restart-1:
+                tour = Tour(self,range(1,len(tour.order)+1))
+            
             tour = self.RVND(tour,disp)
             if tour.wlatency < fbest:
                 fbest = tour.wlatency
                 best = tour
             if disp>=1:
-                print 'Best tour after {0} restart(s): {1}'.format(i+1,fbest)
+                print 'Best tour after {0} restart(s): {1}'.format(i+1,tour.wlatency)
                 print '-----------------------------------'
         return best
 
@@ -351,7 +354,7 @@ class Subsequence:
         d1 = self.mlt.distances[0,self.order[0]]
         d2 = self.mlt.distances[0,self.order[-1]]
         lat = self.latency + d1 + d2
-        wlat = self.wlatency + d1 * sum(self.mlt.sumwgt) + (self.latency + d2) * self.mlt.weights[0]
+        wlat = self.wlatency + d1 * self.mlt.sumwgt + (self.latency + d2) * self.mlt.weights[0]
         return Tour(self.mlt,self.order,lat,wlat)
 
 """

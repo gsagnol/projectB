@@ -8,7 +8,7 @@ import os
 
 template = sys.argv[1]
 out = template+'_merged.csv'
-to_merge = os.popen('ls -a ../solutions/'+template+'*.csv').read().split()
+to_merge = os.popen('ls -a '+template+'*.csv').read().split()
 
 first = to_merge.pop()
 os.system('cp '+first+' ../solutions/'+out)
