@@ -526,13 +526,15 @@ class KTour:
         self.cost = self.Z + self.mu_excess * self.excess
 
 
-    def RVND(self,inbest = 5, disp=0,start_it = 0):
-        NLinit = ['relocate','exchange','twoopt']
+    def RVND(self,inbest = 5, disp=0,start_it = 0,tabu_tenure=3):
+        #NLinit = ['relocate','exchange','twoopt']
+        NLinit = ['relocate','twoopt']
         NL = NLinit[:]
         it = start_it
         if disp>=2:
             print it,self.cost
 
+        tabu = []
         fbest = self.cost
 
         excess_it = 0
@@ -549,27 +551,49 @@ class KTour:
                 diff_excess = (-(max(0.,self.tours[t1].weight-weight_limit) + max(0.,self.tours[t2].weight-weight_limit))
                                 + max(0.,sw1.weight-weight_limit) + max(0.,sw2.weight-weight_limit))
                 diff_latency = sw1.wlatency + sw2.wlatency - self.tours[t1].wlatency - self.tours[t2].wlatency
-                tab.append((diff_latency + self.mu_excess*diff_excess,args))
-                            ##sum([max(0.,t.weight-1000.) for t in self.tours])))
+                if tabu_tenure>0:
+                    istabu = any([t[:2] in self.all_moves(neighborhood,args) for t in tabu])
+                else:
+                    istabu = False
+                tab.append((diff_latency + self.mu_excess*diff_excess,args,istabu))
 
-            r = np.random.randint(18)
-            stab = sorted(tab)
 
-            if r == 0 and len(stab) >= 5 and inbest >= 5 and stab[4][0] < 1e-3:
+            if inbest == 5:
+                r = np.random.randint(18)
+            elif inbest == 4:
+                r = np.random.randint(17) + 1
+            elif inbest == 3:
+                r = np.random.randint(15) + 3
+            elif inbest == 2:
+                r = np.random.randint(12) + 6
+            elif inbest == 1:
+                r = 16
+
+            if tabu_tenure>0:
+                stab = sorted([t for t in tab if not(t[2])])
+            else:
+                stab = sorted(tab)
+
+            if r == 0 and len(stab) >= 5 and stab[4][0] < 1e-3:
                 next_move = stab[4]
-            elif r<=2 and len(stab) >= 4 and inbest >= 4 and stab[3][0] < 1e-3:
+            elif r<=2 and len(stab) >= 4 and stab[3][0] < 1e-3:
                 next_move = stab[3]
-            elif r<=5 and len(stab) >= 3 and inbest >= 3 and stab[2][0] < 1e-3:
+            elif r<=5 and len(stab) >= 3 and stab[2][0] < 1e-3:
                 next_move = stab[2]
-            elif r<=10 and len(stab) >= 2 and inbest >= 2 and stab[1][0] < 1e-3:
+            elif r<=10 and len(stab) >= 2 and stab[1][0] < 1e-3:
                 next_move = stab[1]
-            elif r<=17 and len(stab) >= 1 and inbest >= 1 and stab[0][0] < 1e-3:
+            elif r<=17 and len(stab) >= 1 and stab[0][0] < 1e-3:
                 next_move = stab[0]
             else:
                 NL.remove(neighborhood)
                 if disp>=2:
                     print it,self.cost,self.excess
                 continue
+
+            if tabu_tenure>0:
+                revmoves = self.reverse_moves(neighborhood,next_move[1])
+                tabu = [(i,k,t-1) for i,k,t in tabu if t>0]
+                tabu.extend([(i,k,tabu_tenure) for i,k in revmoves])
 
             self.move(neighborhood,next_move[1])
             fbest = self.cost
@@ -596,6 +620,32 @@ class KTour:
             self.cost = self.Z + self.mu_excess * self.excess
             print 'augmenting weight penalty: mu={0}'.format(self.mu_excess)
             self.RVND(inbest=inbest,disp=disp,start_it=it)
+
+    def reverse_moves(self,neighborhood,args):
+        if neighborhood == 'relocate':
+            k1,k2,i,m,j = args
+            return [(self.tours[k1].order[k],k1) for k in range(i,i+m)]
+        elif neighborhood == 'exchange':
+            k1,k2,i,m,p,j,t = args
+            return [(self.tours[k1].order[k],k1) for k in range(i,i+m)] + [self.tours[k2].order[j],k2]
+        elif neighborhood == 'twoopt':
+            k1,k2,i,j = args
+            n1 = self.tours[k1].n
+            n2 = self.tours[k2].n
+            return [(self.tours[k1].order[k],k1) for k in range(i,n1)] + [(self.tours[k2].order[k],k2) for k in range(j,n2)]
+
+    def all_moves(self,neighborhood,args):
+        if neighborhood == 'relocate':
+            k1,k2,i,m,j = args
+            return [(self.tours[k1].order[k],k2) for k in range(i,i+m)]
+        elif neighborhood == 'exchange':
+            k1,k2,i,m,p,j,t = args
+            return [(self.tours[k1].order[k],k2) for k in range(i,i+m)] + [self.tours[k2].order[j],k1]
+        elif neighborhood == 'twoopt':
+            k1,k2,i,j = args
+            n1 = self.tours[k1].n
+            n2 = self.tours[k2].n
+            return [(self.tours[k1].order[k],k2) for k in range(i,n1)] + [(self.tours[k2].order[k],k1) for k in range(j,n2)]
 
     def relocate(self,k1,k2,i,m,j):
         """
@@ -846,7 +896,7 @@ class KTour:
                         tourj = self.gift_to_tour[jp1]
                         nj = self.tours[tourj].n
                         indjp1 = self.tours[tourj].order.index(jp1)
-                        if jp1==0:
+                        if indjp1==0:
                             continue
                         indj = indjp1 - 1
                         if ip1 not in self.tours[tourj].grangb[indj]:
@@ -1112,8 +1162,10 @@ sol2.write('solE993+1opt.csv')
 # test neighboorhood search #
 #############################
 
+sol = vrp.Solution('../solutions/sol_East_2000_993_12503567581.7.csv',gifts)
+
 #sections sorted per longitude
-offset = 127.
+offset = -180.
 sorlongs = [c for lo,c in sorted([(lo if lo>offset else lo+360.,c) for c,lo in sol.lomeans.iteritems()])]
 nsec = 5
 sections = []
@@ -1131,14 +1183,39 @@ while True:
         break
 
 
-sec = 17
-kt = vrp.KTour(sol,sections[sec],max_excess=50)
-kt.RVND(inbest=3,disp=2)
-sol.write('../partsol/tmpsol1_'+str(sec),only_clusts = kt.tourIDs)
+#sec = 17
+#kt = vrp.KTour(sol,sections[sec],max_excess=50)
+#kt.RVND(inbest=3,disp=2)
+#sol.write('../partsol/tmpsol1_'+str(sec),only_clusts = kt.tourIDs)
 
 
-#TODO Tabu-list
-#TODO multiple restarts with other inbest? with clark_write for init ?
+#285 sections
+for sec in range(215,285):
+    print '---------------------------'
+    print 'SECTION '+str(sec)
+    print '---------------------------'
+    sol = vrp.Solution('../solutions/sol_East_2000_993_12503567581.7.csv',gifts)
+    kt = vrp.KTour(sol,sections[sec],max_excess=20.)
+    best = kt.cost
+    if kt.excess > 0:
+        import pdb;pdb.set_trace()
+
+    sol.write('../partsol/tmpsol1_'+str(sec),only_clusts = kt.tourIDs)
+    for b in [1,3,5]:
+        print 'restart with best '+str(b)
+        sol = vrp.Solution('../solutions/sol_East_2000_993_12503567581.7.csv',gifts)
+        kt = vrp.KTour(sol,sections[sec],max_excess=20.)
+        kt.RVND(inbest=b,disp=2,tabu_tenure=3)
+        if kt.excess < 1e-3 and kt.cost < best:
+            kt.update_sol()
+            best = kt.cost
+            sol.write('../partsol/tmpsol1_'+str(sec),only_clusts = kt.tourIDs)
+
+
+
+
+
+#TODO multiple restarts with other inbest? with clark_wright for init ?
 #TODO update Neighborhood (involving long ?)
 #TODO neg moves
 #TODO in exchange bef/after dep on lat.
